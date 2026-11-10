@@ -8,6 +8,7 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from .core import validate_audit
+from .codex_identity import confirmed_session
 
 PLUGIN='left-undone'
 RULES='''Audit the assistant reply and its open promises. Return only {"done":[1-based indices],"add":[strings]}.
@@ -143,39 +144,56 @@ def resolve_history(kind, account, session):
     return paths.pop()
 
 
+def alive(pid,started):
+    try:info=process_info(pid)
+    except (OSError,ValueError,UnicodeError):return False
+    return bool(info) and str(info['started'])==str(started)
+
+
+def codex_session(live,proc):
+    """Active Codex UUID proven by the native thread-id title (see codex_identity)."""
+    return confirmed_session(live,proc,alive)
+
+
 def candidates():
     live=herdr('agent','list')['agents'];procs=processes();out=[];errors=[]
     for a in live:
         if a.get('agent') not in ('codex','claude'):continue
-        sid=(a.get('agent_session') or {}).get('value')
-        if not sid or a['agent_session'].get('kind')!='id':
-            errors.append(a['pane_id']+': sessão ainda não identificada pelo Herdr');continue
         matches=[p for p in procs if p['pane']==a['pane_id'] and p['kind']==a['agent']]
+        sid=(a.get('agent_session') or {}).get('value')
+        if a['agent']!='codex' and (not sid or a['agent_session'].get('kind')!='id'):
+            errors.append(a['pane_id']+': sessão ainda não identificada pelo Herdr');continue
         if len(matches)!=1:
             errors.append(a['pane_id']+': processo/conta ambíguos');continue
         p=matches[0]
-        try:history=resolve_history(a['agent'],p['account'],sid)
+        try:
+            if a['agent']=='codex':sid=codex_session(a,p)
+            history=resolve_history(a['agent'],p['account'],sid)
         except RuntimeError as e:errors.append(a['pane_id']+': '+str(e));continue
         out.append(Binding(a['agent'],sid,p['account'],a['pane_id'],a['terminal_id'],a['workspace_id'],str(history),p['pid'],p['started']))
     return out,errors
 
 
-def verify_live(binding, live):
+def verify_live(binding, live, session=True):
     sid=live.get('agent_session') or {}
     if (live.get('pane_id')!=binding.pane or live.get('terminal_id')!=binding.terminal or
-        live.get('agent')!=binding.kind or sid.get('kind')!='id' or sid.get('value')!=binding.session):
+        live.get('agent')!=binding.kind or session and (sid.get('kind')!='id' or sid.get('value')!=binding.session)):
         raise RuntimeError('Vínculo mudou ou sessão desconhecida. Reabra e selecione a conversa.')
 
 
 def verify(binding, ready=False):
     live=herdr('agent','get',binding.pane)['agent']
-    verify_live(binding,live)
+    # Codex: Herdr's native UUID can lag after /new or /resume; the active
+    # thread is proven below from the process's native thread-id title.
+    verify_live(binding,live,session=binding.kind!='codex')
     foreground=herdr('pane','process-info','--pane',binding.pane)['process_info']['foreground_processes']
     if binding.pid not in [p['pid'] for p in foreground]:
         raise RuntimeError('O processo verificado não ocupa mais o pane')
     p=process_info(binding.pid)
     if not p or any(p[k]!=v for k,v in [('started',binding.started),('kind',binding.kind),('pane',binding.pane),('account',binding.account)]):
         raise RuntimeError('Processo ou conta mudou. Reabra o painel.')
+    if binding.kind=='codex' and codex_session(live,p)!=binding.session:
+        raise RuntimeError('A conversa ativa neste pane mudou; coleta e envio bloqueados para este vínculo. Reabra o painel na conversa certa.')
     if resolve_history(binding.kind,binding.account,binding.session)!=Path(binding.history):
         raise RuntimeError('Histórico da sessão mudou')
     if ready and live.get('agent_status') not in ('idle','done'):

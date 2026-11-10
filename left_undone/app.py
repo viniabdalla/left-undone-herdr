@@ -10,17 +10,12 @@ from dataclasses import asdict
 from pathlib import Path
 from .core import Collector,Store
 from .runtime import Analyzer,Binding,PLUGIN,candidates,herdr,verify
+from .codex_identity import state_root
 from .ui import panel,picker
 from .repository import project_root,repository_sessions,saved_sessions,pending_counts
 from .projects import project_store
 from .curation import Curator,CuratedStore,RULES as CURATOR_RULES,SCHEMA as CURATOR_SCHEMA
 from .collection_request import wait_for_collection
-
-
-def state_root():
-    root=Path(os.environ.get('LEFT_UNDONE_STATE_DIR',str(Path(os.environ.get('XDG_STATE_HOME',str(Path.home()/'.local/state')))/'left-undone-herdr')))
-    root.mkdir(parents=True,exist_ok=True,mode=0o700)
-    return root
 
 
 def atomic_json(path,data):

@@ -165,20 +165,36 @@ preservados. O histórico detalha sessão, evento, antes/depois e destino de dup
 
 ## Identidade e limites
 
-**Falha reproduzida em 2026-11-10 (Codex 0.167.0 / integração Herdr v8):** após
-`/new` ou `/resume`, o Herdr pode continuar anunciando o UUID anterior até a
-primeira interação da conversa escolhida. Nesse intervalo, até a verificação
-imediata do Left Undone pode aceitar o vínculo antigo e enviar à conversa errada.
-Reabrir o painel antes dessa interação não resolve. Até a correção, após trocar
-de conversa, envie primeiro uma mensagem diretamente ao Codex, aguarde a resposta
-e só então reabra o Left Undone. Evidências em
-`docs/evidence/codex-session-lifecycle/`; a validação completa continua reprovada.
+**Troca de conversa no Codex (/new, /resume) — correção PARCIAL.** O Codex
+0.167.0 só dispara SessionStart na volta seguinte, então o Herdr continua
+anunciando o UUID anterior depois de `/new` ou `/resume`. Para Codex, o Left
+Undone agora exige uma prova da conversa ativa: o próprio Codex desenha no
+título o item nativo `thread-id` (prefixo 8-4-4-4-5 do UUID) assim que a
+conversa visível muda. O título só vale como prova quando o processo foi
+iniciado com `-c 'tui.terminal_title=["thread-id"]'` (lido de
+`/proc/PID/cmdline`, que não muda) e o título inteiro é exatamente um prefixo.
+Nome da conversa, projeto, vários UUIDs, configuração gerenciada, overrides
+ambíguos bloqueiam. QUALQUER alteração do `config.toml` depois do início do
+processo também bloqueia, seja qual for o conteúdo, inclusive `/model`
+persistido, confiar numa pasta ou outro Codex gravando a config; reabra o Codex.
+
+- Codex sem esse override: coleta e envio ficam bloqueados (sem prova).
+- `/new` antes da primeira mensagem: vínculo antigo recusado; a nova conversa
+  ainda não tem UUID completo nem histórico, então só fica disponível depois da
+  primeira mensagem enviada diretamente ao Codex (proteção, não reconhecimento).
+- `/resume` para conversa já confirmada (Herdr e título concordando) no mesmo
+  PID/início/pane/terminal/conta: reconhecida antes da primeira mensagem.
+- `/resume` para conversa nunca confirmada nesse processo: bloqueada até a
+  primeira mensagem direta.
+O prefixo nunca escolhe histórico nem é registrado no Herdr; dois UUIDs
+confirmados com o mesmo prefixo bloqueiam, mesmo quando o Herdr concorda. Claude não muda. Detalhes e
+evidência: `docs/codex-active-thread-2026-11-10.md`.
 
 O plugin confere sessão anunciada pelo Herdr, terminal, processo foreground,
 PID/starttime, conta e histórico estruturado. Não deduz destinatário por foco
 visual, cwd ou ambiente herdado. Sessão ausente/ambígua fica indisponível;
-uma primeira resposta do agente pode ser necessária para o Herdr identificar
-seu UUID. A listagem explica panes indisponíveis.
+uma primeira mensagem direta ao agente pode ser necessária para o Herdr
+identificar seu UUID. A listagem explica panes indisponíveis.
 
 Para ferramentas Codex sem contexto Herdr ou conversas sem registro nativo,
 a skill agora usa `left-undone recover --marker LU-<32 dígitos hexadecimais>`.

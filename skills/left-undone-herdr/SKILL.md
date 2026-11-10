@@ -38,8 +38,8 @@ usuário, associe explicitamente com `python3 scripts/left-undone open --pane PA
 --session UUID --project /caminho/do/projeto`. Essa associação persiste. Nunca
 use `--project` para adivinhar qual é o destinatário. Não altere a associação de
 outras conversas sem evidência de que pertencem ao projeto.
-Após trocar /new ou /resume, a atualização automática do destinatário ainda
-está pendente: compartilhar a lista não corrige o UUID nativo obsoleto.
+Compartilhar a lista não decide o destinatário; após /new ou /resume vale a
+verificação da conversa ativa descrita abaixo.
 
 ## Abrir uma conversa identificada
 
@@ -89,7 +89,7 @@ uma tarefa compartilhada. Nenhuma tarefa é concluída por simples omissão.
 O heartbeat apenas verifica mudanças; não há chamada ao LLM em polling ocioso.
 Use `python3 scripts/left-undone changes --binding ARQUIVO` para conferir o
 histórico de alterações, e `items --binding` para listar sem abrir outro painel.
-A curadoria não corrige o destinatário obsoleto após /new ou /resume.
+A curadoria não decide o destinatário; isso é feito pela verificação de identidade.
 
 Se a sessão não foi identificada pelo Herdr, explique a indisponibilidade.
 Não invente UUID, não use report-agent-session com ID deduzido do cwd e
@@ -100,13 +100,18 @@ Limite do Herdr 0.9.1: o envio valida identidade imediatamente antes de
 `agent prompt`, mas a API não oferece envio atômico condicionado ao UUID.
 Não repita automaticamente um envio após timeout/erro ambíguo.
 
-Falha ao vivo confirmada em 2026-11-10 com Codex 0.167.0/integração v8:
-após /new ou /resume, o Herdr pode anunciar o UUID antigo até a primeira
-interação da conversa escolhida. Reabrir o painel nesse intervalo não basta.
-Quando houver troca de conversa, aguarde uma resposta a uma mensagem enviada
-diretamente ao Codex antes de abrir/enviar pelo Left Undone. Não anuncie a
-validação completa de troca/retomada como aprovada enquanto essa falha existir.
-
+Codex /new e /resume (correção parcial, 2026-11-10): o Herdr pode anunciar o
+UUID antigo até a primeira mensagem da conversa escolhida. Para Codex, o
+painel só coleta/envia se o processo foi iniciado com
+`-c 'tui.terminal_title=["thread-id"]'` e o título for exatamente o prefixo da
+conversa ativa, coerente com um UUID confirmado nativamente nesse processo.
+Qualquer alteração do config.toml após o início do Codex (inclusive /model)
+também bloqueia até reabrir o Codex. Mensagens "Codex iniciado sem -c ...",
+"config.toml ... alterado depois do início" ou "ainda sem confirmação nativa"
+são bloqueios esperados: não contorne, não registre UUID por prefixo e não mude a
+config global sem pedido. Após /new, peça que a pessoa envie uma mensagem
+diretamente ao Codex e então reabra. /resume para conversa já confirmada no
+mesmo processo é reconhecido sem nova mensagem.
 
 ## Codex com app-server e contexto ausente
 
