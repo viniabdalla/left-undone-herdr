@@ -37,7 +37,8 @@ class RecoveryTests(unittest.TestCase):
                 'content': [{'type': 'output_text', 'text': self.marker}]}}) + '\n')
 
     def recover(self, visible=None, duplicate=False, foreground=10, changed_pid=False,
-                changed_terminal=False, hook_effect=True, hook_timeout=False):
+                changed_terminal=False, hook_effect=True, hook_timeout=False,
+                wait=0, on_wait=None):
         proc = {'pid': 10, 'started': '100', 'kind': 'codex', 'pane': 'w1:p1', 'account': str(self.root)}
         procs = [proc]
         if duplicate:procs.append({**proc, 'pid': 11, 'pane': 'w1:p2'})
@@ -68,9 +69,10 @@ class RecoveryTests(unittest.TestCase):
              patch.object(runtime, 'process_environment', side_effect=env), \
              patch.object(runtime, 'process_info', return_value={**proc, 'started': 'changed'} if changed_pid else proc), \
              patch.object(runtime, 'raw_herdr', side_effect=api), \
+             patch('left_undone.recovery.time.sleep', side_effect=on_wait or (lambda _: None)), \
              patch('subprocess.run', side_effect=run):
             from left_undone.recovery import recover
-            return recover(self.marker)
+            return recover(self.marker,wait_seconds=wait)
 
     def test_missing_native_uuid_recovers_from_exact_history_and_visible_marker(self):
         binding = self.recover()
@@ -94,3 +96,18 @@ class RecoveryTests(unittest.TestCase):
         for kwargs in ({'changed_pid': True}, {'changed_terminal': True},
                        {'hook_effect': False}, {'hook_timeout': True}):
             with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError):self.recover(**kwargs)
+
+    def test_visible_marker_survives_terminal_line_wrapping(self):
+        text='Verificação: LU-\n  '+self.marker[3:19]+'\n    '+self.marker[19:]
+        self.assertEqual(self.recover(visible=text).session,self.session)
+
+    def test_recent_commentary_can_reach_transcript_after_first_read(self):
+        self.history.write_text(json.dumps({'type':'session_meta','payload':{'id':self.session}})+'\n')
+        self.assertEqual(self.recover(wait=.5,on_wait=lambda _:self.write_history()).session,self.session)
+
+    def test_wrong_marker_characters_are_never_repaired(self):
+        with self.assertRaises(RuntimeError):self.recover(visible=self.marker[:-1]+'d')
+
+    def test_ambiguous_match_does_not_wait_for_one_candidate_to_disappear(self):
+        def must_not_wait(_):raise AssertionError('Ambiguidade não pode ser resolvida esperando')
+        with self.assertRaises(RuntimeError):self.recover(duplicate=True,wait=.5,on_wait=must_not_wait)

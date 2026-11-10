@@ -2,6 +2,7 @@
 import fcntl
 import hashlib
 import json
+import re
 import time
 from datetime import datetime
 from contextlib import contextmanager
@@ -15,6 +16,14 @@ Compare meanings, not just wording. Keep tasks short, specific, in the user's la
 Add genuinely new actionable work, not duplicates, explanations, questions, hypothetical
 ideas, requests for approval, or work already completed. Use scope project for project
 work/checklists, session only for personal commitments specific to this conversation.
+How-to instructions, sample messages, suggested prompts and test walkthroughs are
+examples, not real pending work. If the user asks how to test, do not turn the
+example task into an actual task. Additions require explicit real work in this exchange.
+Existing list items are already real work. First reconcile equivalent OPEN visible
+items independently of the exchange: archive a writable own promise that merely
+restates an existing shared task. This cleanup does not require new reply evidence.
+Assistant fenced examples are excluded from the evidence; real user requests
+remain available in request, including user-supplied checklists.
 Existing equivalent visible work: do not add it again. Preserve distinct sub-tasks/deliverables.
 Foreign private promises (canonical=false) must not suppress project work or your own
 private work, and cannot be duplicate destinations. They are context only.
@@ -89,6 +98,22 @@ def validate(value, context):
 
 class StaleReview(RuntimeError):
     pass
+
+
+def prose_evidence(text):
+    """Assistant fenced samples/code are not authoritative task declarations."""
+    lines=[];fence=None
+    for line in text.splitlines():
+        parsed=re.sub(r'^\s*(?:>[ \t]*)+','',line)
+        match=re.match(r'^\s*(`{3,}|~{3,})(.*)$',parsed)
+        if fence is None and match and match[1][0]=='`' and '`' in match[2]:match=None
+        if match:
+            token=match[1]
+            if fence is None:fence=token;continue
+            if token[0]==fence[0] and len(token)>=len(fence) and not match[2].strip():fence=None
+            continue
+        if fence is None:lines.append(line)
+    return '\n'.join(lines)
 
 
 class CuratedStore(Store):
@@ -184,7 +209,7 @@ class Curator:
             items=self.snapshot()
             for item in items:
                 if stamp is None or item['created']>stamp:item['writable']=False
-            return self._review(reply[-12000:], request[-4000:], event, items, stamp)
+            return self._review(prose_evidence(reply)[-12000:], request[-4000:], event, items, stamp)
 
     def _review(self, reply, request, event, items, stamp=None):
         context = {'reply': reply, 'request': request, 'items': items}

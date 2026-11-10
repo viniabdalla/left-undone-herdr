@@ -133,6 +133,9 @@ Confira o UUID dentro do arquivo `.binding.json` para escolher a sessão.
   CLIs autenticados da conta verificada, sem persistir sessões de análise,
   sem carregar arquivos do repo e sem hooks/MCP herdados. A lista do projeto é
   enviada explicitamente como dados; o curador não executa tarefas.
+- Exemplos de mensagens e roteiros de teste não representam trabalho solicitado.
+  Blocos de código/exemplo da resposta do assistente não servem como evidência
+  de tarefa; pedidos reais do usuário continuam disponíveis para a curadoria.
 - Falha de autenticação, cota, timeout ou JSON mantém a lista e o cursor;
   o painel mostra erro e tenta novamente em 30 segundos. Fechar interrompe.
 - Ao abrir pela primeira vez, percorre o histórico existente: conversas
@@ -171,6 +174,11 @@ O agente publica uma marca nova em commentary; o comando cruza essa marca
 recente com histórico, painel visível, conta e processo, registra pelo hook
 nativo e verifica o resultado. Não envia mensagens nem reinicia processos.
 Essa recuperação pontual não detecta automaticamente trocas futuras de conversa.
+A recuperação aguarda brevemente a publicação da marca no histórico/terminal e
+aceita a marca quebrada entre linhas pelo terminal. Ambiguidade continua sendo
+recusada imediatamente. A espera ocorre somente antes de qualquer registro;
+falhas do hook ou da confirmação não são repetidas automaticamente. Se falhar,
+a mensagem identifica a etapa ausente (processo, histórico ou marca visível).
 
 A conta vem do processo autenticado; instalações que compartilham históricos
 por symlink são suportadas. Mudanças de sessão/conta bloqueiam envio e coleta.

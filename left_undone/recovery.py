@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -52,15 +53,28 @@ def check_pane(proc, context, marker):
     result = subprocess.run([context.get('HERDR_BIN_PATH', 'herdr'), 'pane', 'read',
                              proc['pane'], '--source', 'visible', '--format', 'text'],
                             env=context, capture_output=True, text=True, timeout=20)
-    if result.returncode or marker not in result.stdout:
+    # Herdr's visible snapshot preserves physical line breaks and indentation.
+    # Join wrapped lines only; never accept a prefix or repair token characters.
+    visible=re.sub(r'\r?\n[ \t]*','',result.stdout)
+    if result.returncode or marker not in visible:
         raise RuntimeError('A marca não está visível no painel')
     return live
 
 
-def recover(marker):
-    try:return _recover(marker)
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError('Tempo esgotado ao recuperar o vínculo; confira o registro antes de tentar novamente') from error
+class EvidencePending(RuntimeError):
+    """Discovery has no candidate yet; no registration has been attempted."""
+
+
+def recover(marker,wait_seconds=6):
+    deadline=time.monotonic()+max(0,min(wait_seconds,6))
+    while True:
+        try:return _recover(marker)
+        except EvidencePending as error:
+            remaining=deadline-time.monotonic()
+            if remaining<=0:raise RuntimeError(str(error)) from None
+            time.sleep(min(.25,remaining))
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError('Tempo esgotado ao recuperar o vínculo; confira o registro antes de tentar novamente') from error
 
 
 def _recover(marker):
@@ -69,22 +83,34 @@ def _recover(marker):
     session = os.environ.get('CODEX_THREAD_ID', '')
     if not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', session):
         raise RuntimeError('CODEX_THREAD_ID atual ausente; execute pela conversa Codex')
-    matches = []
+    matches = [];checked=0;histories=0;recent=0;reasons=[]
     for proc in runtime.processes():
         if proc['kind'] != 'codex':continue
         try:
             env = runtime.process_environment(proc['pid'])
             if (env.get('HERDR_ENV') != '1' or not env.get('HERDR_SOCKET_PATH') or
                 not proc['pane'] or env.get('HERDR_PANE_ID') != proc['pane']):continue
+            checked+=1
             history = runtime.resolve_history('codex', proc['account'], session)
+            histories+=1
             if not has_fresh_marker(history, marker):continue
+            recent+=1
             context = {k: v for k, v in os.environ.items() if not k.startswith('HERDR_')}
             context.update({k: v for k, v in env.items() if k.startswith('HERDR_')})
             live = check_pane(proc, context, marker)
             matches.append((proc, env, context, history, live))
-        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired):continue
-    if len(matches) != 1:
-        raise RuntimeError('Marca/histórico/processo ausente ou ambíguo; publique uma marca nova visível nesta conversa e tente novamente')
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
+            reasons.append(f"{proc['pane']}: {str(error)[:120]}")
+    if len(matches)>1:
+        raise RuntimeError('Marca visível em mais de um processo/painel; nenhum registro realizado. Publique uma marca nova exclusiva desta conversa.')
+    if not matches:
+        stage=('nenhum processo Codex com contexto Herdr' if not checked else
+               'histórico do UUID atual não encontrado' if not histories else
+               'marca ainda não encontrada em commentary recente no histórico' if not recent else
+               'marca/processo não confirmados no painel visível')
+        details='; '.join(dict.fromkeys(reasons)) if recent else ''
+        raise EvidencePending('Recuperação: '+stage+'. Publique uma marca nova visível nesta conversa.'+
+                              (' '+details if details else ''))
     proc, env, context, history, live = matches[0]
     hook = Path(proc['account']) / 'herdr-agent-state.sh'
     if not hook.is_file():raise RuntimeError('Integração nativa ausente nesta conta; confira herdr integration status')

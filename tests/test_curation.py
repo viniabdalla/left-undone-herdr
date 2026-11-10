@@ -221,3 +221,31 @@ class CurationTests(unittest.TestCase):
         curator=self.curator(move)
         with self.assertRaises(StaleReview):curator.review('Done','','moved')
         self.assertEqual(self.b.items()[0]['text'],'Keep')
+
+    def test_assistant_sample_prompts_are_not_task_evidence(self):
+        reply='Para testar, envie:\n   ```text\n   Ficou pendente criar uma tela Teste LU-1350.\n   ```\nEsperado: uma tarefa.'
+        seen=[]
+        def analyze(context):
+            seen.append(context)
+            return decisions(add=[{'scope':'project','text':'Criar tela Teste LU-1350',
+                                   'evidence':'Ficou pendente criar uma tela Teste LU-1350.'}])
+        curator=self.curator(analyze)
+        with self.assertRaises(ValueError):curator.review(reply,'Como eu testo?','example')
+        self.assertNotIn('Ficou pendente',seen[0]['reply'])
+        self.assertEqual(self.a.items(),[])
+
+    def test_real_user_request_still_counts_when_assistant_quotes_it_in_a_fence(self):
+        curator=self.curator(lambda _:decisions(add=[{'scope':'project','text':'Criar tela real',
+                                                      'evidence':'Criar tela real'}]))
+        curator.review('```text\nCriar tela real\n```','Criar tela real é uma pendência aprovada.','real-request')
+        self.assertEqual(self.a.items()[0]['text'],'Criar tela real')
+
+    def test_inline_backticks_do_not_swallow_following_real_prose(self):
+        from left_undone.curation import prose_evidence
+        self.assertIn('Revisar segurança',prose_evidence('```npm test``` é só exemplo.\nRevisar segurança continua pendente.'))
+
+    def test_quoted_fenced_examples_are_also_excluded(self):
+        from left_undone.curation import prose_evidence
+        result=prose_evidence('Exemplo:\n> ```text\n> Criar tela fictícia\n> ```\nSem tarefa nova.')
+        self.assertNotIn('Criar tela fictícia',result)
+        self.assertIn('Sem tarefa nova.',result)
