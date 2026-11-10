@@ -11,7 +11,6 @@ atualizado: 2026-11-10
 ## Próximo
 - [ ] Ao enviar com o agente ocupado, perguntar se deseja colocar os itens na fila do harness
 - [ ] Planejar listas persistentes por projeto, compartilhadas entre conversas do mesmo projeto
-- [ ] Atualizar Left Undone nas outras máquinas via SSH a partir do repositório privado para uso nos projetos
 - [ ] Adicionar botão Coletar agora para disparar a coleta sob demanda
 - [ ] Corrigir conversas Codex no Herdr não identificadas: UUID/processo ausente ou ambíguo (print do usuário, 2026-11-10)
 - [ ] Corrigir UUID antigo após /new ou /resume no Codex antes da primeira resposta e revalidar troca/retomada (falha reproduzida ao vivo)
@@ -20,6 +19,7 @@ atualizado: 2026-11-10
 - [ ] Eliminar janela entre verificação e envio — depende de envio condicionado ao UUID na API Herdr
 
 ## Feito
+- [x] 2026-11-10 Distribuir versão Git no omarchy2 e Omarchy novo por SSH; 53 testes em cada máquina; tropico-1 excluída a pedido
 - [x] 2026-11-10 Inicializar Git e criar repositório privado viniabdalla/left-undone-herdr
 - [x] 2026-11-10 Executar validação Codex ao vivo: retomada preserva itens/seleção/baixas, mas transição mantém UUID antigo até primeira resposta; correção permanece pendente
 - [x] 2026-11-10 Instalar atalho left-undone por repo com seletor no próprio terminal
