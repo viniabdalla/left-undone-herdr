@@ -154,10 +154,12 @@ def panel(win,binding,root,binding_file):
         db.close()
 
 
-def picker(win,bindings,errors,choose,counts=None):
+def picker(win,bindings,errors,choose,counts=None,titles=None):
     configure(win);cursor=0;page=0;mouse=MouseInput();notice='; '.join(errors);size=None
     counts=counts or {}
-    items=[{'id':i,'text':f'{b.kind} · {b.pane} · {b.session[:12]} · conta {Path(b.account).name}'
+    titles=titles or {}
+    items=[{'id':i,'heading':f'{b.pane} · {titles.get(b.pane) or "Sem título no Herdr"}',
+            'text':f'{b.kind} · {b.session[:12]} · conta {Path(b.account).name}'
             +(f' · {counts[b.key] if counts[b.key] is not None else "?"} pendências' if b.key in counts else '')}
            for i,b in enumerate(bindings)]
     while True:

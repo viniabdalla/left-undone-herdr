@@ -7,6 +7,18 @@ def item(i,text,selected=0):
     return {'id':i,'text':text,'selected':selected,'origin':'import'}
 
 class LayoutTests(unittest.TestCase):
+    def test_picker_shows_panel_title_above_clickable_details(self):
+        rows=[{'id':0,'heading':'w5:p1 · Continue desenvolvendo o Git',
+               'text':'codex · 01a1c583-45f · conta .codex · 10 pendências'}]
+        for width in (25,80):
+            with self.subTest(width=width):
+                layout=picker_layout(rows,width,25,0,0)
+                lines=[line for line in layout.lines if line.action==('choose',0)]
+                self.assertTrue(lines[0].text.startswith('> w5:p1 · Continue'))
+                self.assertTrue(lines[1].text.startswith('  codex · 01a1c583-45f'))
+                self.assertIn('10 pendências',' '.join(line.text.strip() for line in lines))
+                self.assertEqual(layout.hit(3,lines[1].y),('choose',0))
+
     def test_collect_button_is_clickable_without_selection_and_in_narrow_panel(self):
         for width,height in ((18,13),(40,30),(80,24)):
             for selected in (0,1):

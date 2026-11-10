@@ -141,7 +141,8 @@ def main():
             from .recovery import recover
             print(json.dumps(asdict(recover(args.marker)),ensure_ascii=False,indent=2));return
         if args.command in ('list','open','pick'):
-            bs,errors=candidates()
+            titles={}
+            bs,errors=candidates(titles=titles)
             repo=None
             if args.repo is not None:
                 if not args.repo.expanduser().is_dir():raise RuntimeError('Pasta do repo não existe: '+str(args.repo))
@@ -160,7 +161,7 @@ def main():
                         print('\n'.join(notes+errors));return
                 errors=notes+errors
             if args.command=='pick':
-                curses.wrapper(picker,bs,errors,open_panel,counts=pending_counts(root,bs));return
+                curses.wrapper(picker,bs,errors,open_panel,counts=pending_counts(root,bs),titles=titles);return
             if args.pane and args.session:
                 matches=[b for b in bs if b.pane==args.pane and b.session==args.session]
                 if len(matches)!=1:raise RuntimeError('Pane/sessão não verificável: '+'; '.join(errors))
@@ -169,7 +170,7 @@ def main():
             if repo is not None and len(bs)==1:
                 print(json.dumps(open_panel(bs[0])));return
             if sys.stdin.isatty() and sys.stdout.isatty():
-                curses.wrapper(picker,bs,errors,open_panel,counts=pending_counts(root,bs));return
+                curses.wrapper(picker,bs,errors,open_panel,counts=pending_counts(root,bs),titles=titles);return
             # Agent tools have no interactive terminal. Keep their selector inside
             # Herdr too, as a regular split instead of a client popup.
             print(json.dumps(herdr('plugin','pane','open','--plugin',PLUGIN,'--entrypoint','picker','--placement','split','--direction','right',

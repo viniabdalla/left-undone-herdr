@@ -144,7 +144,7 @@ def resolve_history(kind, account, session):
     return paths.pop()
 
 
-def candidates():
+def candidates(*,titles=None):
     live=herdr('agent','list')['agents'];procs=processes();out=[];errors=[]
     for a in live:
         if a.get('agent') not in ('codex','claude'):continue
@@ -158,6 +158,8 @@ def candidates():
         try:history=resolve_history(a['agent'],p['account'],sid)
         except RuntimeError as e:errors.append(a['pane_id']+': '+str(e));continue
         out.append(Binding(a['agent'],sid,p['account'],a['pane_id'],a['terminal_id'],a['workspace_id'],str(history),p['pid'],p['started']))
+        if titles is not None:
+            titles[a['pane_id']]=a.get('terminal_title_stripped') or a.get('terminal_title') or ''
     return out,errors
 
 

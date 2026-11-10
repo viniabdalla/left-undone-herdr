@@ -96,7 +96,15 @@ def pages_for(items,width,rows,picker=False):
     for item in items:
         origin={'task':'TAREFA','promise':'PROMESSA','import':'IMPORTADO'}.get(item.get('origin'),'')
         text=item['text'] if picker else f'{origin} · {item["text"]}'
-        lines=wrap_text(text,width-(2 if picker else 6))
+        line_width=width-(2 if picker else 6)
+        lines=wrap_text(text,line_width)
+        if picker and item.get('heading'):
+            heading=item['heading']
+            if cell_width(terminal_text(heading))>line_width:
+                heading=fit(heading,line_width-1)+'…'
+            lines.insert(0,heading)
+            if used and len(lines)<=rows and used+len(lines)>rows:
+                pages.append([]);used=0
         while lines:
             if used==rows or len(pages[-1])==26:pages.append([]);used=0
             segment=lines[:rows-used];lines=lines[len(segment):]
