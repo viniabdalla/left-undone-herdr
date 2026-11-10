@@ -166,6 +166,37 @@ def panel_layout(items,width,height,page,subtitle,status,notice):
     return build_layout(items,width,height,page,subtitle,status,notice)
 
 
+def confirmation_layout(width,height,count,title,question,confirm_label):
+    layout=Layout(width,height);usable=max(1,width-1)
+    if width<18 or height<12:
+        layout.add(0,0,'Aumente o painel')
+        layout.add(height-1,0,'[2 Cancelar]',action=('key','2'))
+        return layout
+    layout.add(0,0,title,'title')
+    layout.add(1,0,f'{count} '+('item' if count==1 else 'itens'))
+    labels=[(confirm_label,('key','1')),
+            ('[2 Cancelar]',('key','2'))]
+    packed,rows=buttons(labels,usable)
+    for y,line in enumerate(bounded_lines(question,usable,height-rows-4),3):
+        layout.add(y,0,line)
+    for row,x,label,action in packed:
+        layout.add(height-rows-1+row,x,label,'button',action)
+    layout.add(height-1,0,'Esc: cancelar')
+    return layout
+
+
+def queue_confirmation_layout(width,height,count):
+    return confirmation_layout(width,height,count,'AGENTE OCUPADO',
+        'O agente está trabalhando. Quer deixar este pedido na fila para ele receber depois?',
+        '[1 Colocar na fila]' if width>=20 else '[1 Fila]')
+
+
+def done_confirmation_layout(width,height,count):
+    question=('Marcar o item selecionado como concluído?' if count==1 else
+              f'Marcar os {count} itens selecionados como concluídos?')
+    return confirmation_layout(width,height,count,'CONCLUIR TAREFAS',question,'[1 Confirmar]')
+
+
 def picker_layout(items,width,height,page,cursor,notice='',follow_cursor=False):
     layout=build_layout(items,width,height,page,'Selecione e abra','',notice,True,cursor)
     if follow_cursor and items and not any(i['id']==cursor for i in layout.visible):

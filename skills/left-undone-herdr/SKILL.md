@@ -60,14 +60,27 @@ Textos quebram na largura do painel; tarefas muito altas continuam em outra pág
 No seletor de conversas, clique na linha e depois em Abrir.
 
 Letras selecionam itens. `1` envia os selecionados à conversa vinculada,
-sem retirá-los da lista. `2` conclui. `3` exporta. `4` importa o último arquivo
+sem retirá-los da lista. `2` pede confirmação para concluir. `3` exporta. `4` importa o último arquivo
 exportado. Setas trocam páginas. Esc fecha; estado e seleção ficam salvos.
+
+Na confirmação de conclusão manual, `1` ou **Confirmar** conclui o snapshot
+apresentado; `2`, **Cancelar** ou Esc volta ao painel sem concluir, preservando
+seleção e página. Itens alterados/concluídos/deselecionados durante a pergunta
+invalidam a confirmação. A conclusão automática pela curadoria não muda.
 
 O botão **Coletar agora** e a tecla `5` solicitam uma rodada imediata ao
 coletor existente, sem interromper a coleta automática. Pedidos repetidos são
 agrupados; se houver análise em andamento, aguardam essa rodada terminar.
 O pedido também interrompe a espera após erro, mantendo a validação da sessão.
 A leitura permanece incremental: eventos já processados não são reanalisados.
+
+Enviar com Codex ocupado abre uma confirmação: `1` ou **Colocar na fila** usa
+`codex queue` na conta e no UUID verificados; `2`, **Cancelar** ou Esc retorna
+à lista preservando seleção e página. Não interrompe o turno atual nem conclui
+as tarefas. O snapshot dos itens e a identidade são revalidados ao confirmar.
+Falha/resultado incerto não limpa seleção nem repete o envio: confira a fila
+nativa antes de tentar de novo. Claude não tem fila disponível nesta versão;
+o painel informa a limitação e mantém os itens selecionados.
 
 Para arquivo escolhido: use `export` ou `import --file <arquivo>` junto com
 `--binding <arquivo .binding.json>`. O arquivo de vínculo é criado em

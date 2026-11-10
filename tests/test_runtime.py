@@ -13,6 +13,28 @@ class RuntimeTests(unittest.TestCase):
         self.binding=Binding('codex','s1',str(self.root),'w1:p1','term1','w1',str(self.root/'log.jsonl'),10,'123')
         self.live={'agent':'codex','pane_id':'w1:p1','terminal_id':'term1','agent_session':{'kind':'id','value':'s1'},'agent_status':'idle'}
 
+    def test_only_a_verified_working_agent_offers_queue(self):
+        from left_undone.runtime import verify,AgentBusy
+        def api(*args):
+            if args[0]=='agent':return {'agent':self.live}
+            return {'process_info':{'foreground_processes':[{'pid':10}]}}
+        info={'pid':10,'started':'123','kind':'codex','pane':'w1:p1','account':str(self.root)}
+        with patch('left_undone.runtime.herdr',side_effect=api), \
+             patch('left_undone.runtime.process_info',return_value=info), \
+             patch('left_undone.runtime.resolve_history',return_value=Path(self.binding.history)):
+            self.live['agent_status']='working'
+            with self.assertRaises(AgentBusy):verify(self.binding,ready=True)
+            self.live['agent_session']['value']='other'
+            with self.assertRaises(RuntimeError) as error:verify(self.binding,ready=True)
+            self.assertNotIsInstance(error.exception,AgentBusy)
+            self.live['agent_session']['value']='s1'
+            for state in ('blocked','unknown'):
+                self.live['agent_status']=state
+                with self.assertRaises(RuntimeError) as error:verify(self.binding,ready=True)
+                self.assertNotIsInstance(error.exception,AgentBusy)
+            for state in ('idle','done'):
+                self.live['agent_status']=state;verify(self.binding,ready=True)
+
     def test_session_switch_or_missing_identity_refuses_send(self):
         verify_live(self.binding,self.live)
         for field,value in [('agent_session',{'value':'s2'}),('agent_session',None),('terminal_id','term2'),('agent','claude')]:

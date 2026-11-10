@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from left_undone.core import Store
-from left_undone.ui import page_items, handle_key
+from left_undone.ui import page_items, handle_key, DoneOffer, confirm_done
 
 class UITests(unittest.TestCase):
     def test_selection_send_done_export_import_and_paging(self):
@@ -18,7 +18,8 @@ class UITests(unittest.TestCase):
             handle_key('1',db,visible,sent.append,export)
             self.assertEqual(len(sent),1);self.assertEqual(len(db.items()),30)
             handle_key('b',db,visible,sent.append,export)
-            handle_key('2',db,visible,sent.append,export)
+            with self.assertRaises(DoneOffer) as offer:handle_key('2',db,visible,sent.append,export)
+            confirm_done(db,offer.exception)
             self.assertEqual(len(db.items()),29)
             handle_key('3',db,visible,sent.append,export)
             self.assertTrue(export.read_text().startswith('# Left undone'))

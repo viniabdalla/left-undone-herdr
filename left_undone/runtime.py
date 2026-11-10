@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import signal
 import subprocess
 import tempfile
@@ -167,6 +168,17 @@ def verify_live(binding, live):
         raise RuntimeError('Vínculo mudou ou sessão desconhecida. Reabra e selecione a conversa.')
 
 
+class AgentBusy(RuntimeError):
+    """A verified agent is working; submission requires an explicit queue choice."""
+
+
+class QueueOffer(RuntimeError):
+    def __init__(self,chosen):
+        super().__init__('O agente está trabalhando. Deseja colocar o pedido na fila?')
+        self.items=tuple((item['id'],item['text']) for item in chosen)
+        self.text='\n'.join('You left this undone: '+text for _,text in self.items)
+
+
 def verify(binding, ready=False):
     live=herdr('agent','get',binding.pane)['agent']
     verify_live(binding,live)
@@ -179,6 +191,7 @@ def verify(binding, ready=False):
     if resolve_history(binding.kind,binding.account,binding.session)!=Path(binding.history):
         raise RuntimeError('Histórico da sessão mudou')
     if ready and live.get('agent_status') not in ('idle','done'):
+        if live.get('agent_status')=='working':raise AgentBusy('O agente está trabalhando')
         raise RuntimeError('Aguarde o agente ficar livre; envio não realizado')
     return live
 
@@ -192,9 +205,47 @@ def send(binding,text):
 def send_selected(store,submit):
     chosen=[i for i in store.items() if i['selected']]
     if not chosen:return 0
-    submit('\n'.join('You left this undone: '+i['text'] for i in chosen))
+    try:submit('\n'.join('You left this undone: '+i['text'] for i in chosen))
+    except AgentBusy as error:raise QueueOffer(chosen) from error
     store.clear_selection([i['id'] for i in chosen])
     return len(chosen)
+
+
+def queue_selected(store,offer,submit):
+    # Serialize the validated snapshot and queue acceptance against collector
+    # edits/completions. A failed submission rolls back and retains selection.
+    with store.conn:
+        store.conn.execute('BEGIN IMMEDIATE')
+        current={item['id']:item for item in store.items()}
+        if any(item_id not in current or not current[item_id]['selected'] or
+               current[item_id]['text']!=text for item_id,text in offer.items):
+            raise RuntimeError('A seleção mudou. Revise os itens e tente enviar novamente.')
+        submit(offer.text)
+        store.clear_selection([item_id for item_id,_ in offer.items])
+    return len(offer.items)
+
+
+def queue(binding,text):
+    if binding.kind!='codex':
+        raise RuntimeError('A fila do Claude não está disponível nesta versão. Aguarde o agente terminar.')
+    live=verify(binding)
+    if live.get('agent_status') not in ('working','idle','done'):
+        raise RuntimeError('O agente não está pronto para receber pedidos; fila não enviada.')
+    env={k:v for k,v in os.environ.items() if not k.startswith(
+        ('HERDR_','CODEX_','AI_MEMORY_','OPENAI_','ANTHROPIC_','CLAUDE_CODE_'))}
+    env['CODEX_HOME']=binding.account
+    # Native queue targets a full UUID in its verified account. Never simulate
+    # Enter during a turn or resume the session as a side effect of queueing.
+    try:
+        with tempfile.TemporaryDirectory(prefix='left-undone-queue-') as folder:
+            result=subprocess.run(['codex','queue','--thread',binding.session,'--message',text],
+                cwd=folder,env=env,capture_output=True,text=True,timeout=20)
+    except (OSError,subprocess.TimeoutExpired) as error:
+        raise RuntimeError('Fila não confirmada. Confira a fila do Codex antes de repetir o envio.') from error
+    receipt=re.search(r'^Queued message ([0-9a-f-]{36}) for thread ([0-9a-f-]{36})\.$',result.stdout,re.M)
+    if result.returncode or not receipt or receipt.group(2)!=binding.session:
+        raise RuntimeError('Fila não confirmada. Confira a fila do Codex antes de repetir o envio.')
+    return receipt.group(1)
 
 
 class Analyzer:

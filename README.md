@@ -38,6 +38,24 @@ Enviar/Concluir. Exportar, Importar, páginas e Fechar também são clicáveis.
 A roda do mouse troca páginas. Os textos quebram conforme a largura; tarefas
 que excedem a altura continuam na página seguinte. Os atalhos abaixo continuam ativos.
 
+Ao enviar para um Codex ocupado, o painel pergunta se deseja **Colocar na fila**
+ou **Cancelar**. Na confirmação, `1` enfileira e `2` ou Esc cancela, mantendo a
+seleção e a página. O pedido entra na fila nativa da conversa verificada, na
+mesma conta, sem interromper o trabalho atual. O recibo confirma o recebimento
+pela fila; as tarefas continuam abertas até conclusão. Se a seleção mudar ou
+uma tarefa for concluída antes da confirmação, revise e envie novamente.
+Durante a confirmação do envio, a gravação dos itens é serializada com o coletor.
+Falhas não limpam a seleção nem repetem automaticamente o pedido. Se o resultado
+for incerto, confira a fila do Codex antes de tentar outra vez.
+A fila requer um CLI Codex que ofereça `codex queue`; no Claude, a fila não está
+disponível nesta versão e o painel orienta aguardar o agente terminar.
+
+Concluir pelo botão ou pela tecla `2` pede confirmação com a quantidade de
+itens selecionados. Na pergunta, `1` ou **Confirmar** conclui os itens; `2`,
+**Cancelar** ou Esc volta à lista preservando seleção e página. Se os itens
+mudarem enquanto a pergunta estiver aberta, o pedido é recusado para revisão.
+Isso só altera a conclusão manual; a curadoria automática continua funcionando.
+
 A seleção explícita abre o painel à direita, mantendo o foco anterior.
 Aberturas repetidas reencontram o mesmo painel. Para interagir, foque o painel
 pelos controles normais do Herdr.
@@ -46,7 +64,7 @@ pelos controles normais do Herdr.
 |---|---|
 | a–z | Selecionar/desselecionar item da página |
 | 1 | Enviar selecionados à conversa vinculada; mantém pendências |
-| 2 | Marcar selecionados como concluídos |
+| 2 | Pedir confirmação para marcar selecionados como concluídos |
 | 3 | Exportar pendências em Markdown |
 | 4 | Importar o último export desta sessão |
 | 5 | Coletar agora: solicitar uma rodada imediata ao coletor ativo |
@@ -60,18 +78,23 @@ concluídos pelo agente/analisador ou baixados manualmente.
 ## Instalar / remover
 
 ```sh
+git clone https://github.com/viniabdalla/left-undone-herdr.git
+cd left-undone-herdr
 python3 install.py
-# Para remover os links do plugin, preservando o estado:
-herdr plugin unlink left-undone
+```
+
+Para remover a instalação deste checkout:
+
+```sh
+python3 uninstall.py
 ```
 
 O instalador liga este diretório no Herdr e cria links da skill em
 `~/.agents/skills/left-undone-herdr` e `~/.claude/skills/left-undone-herdr`,
 mais o comando `~/.local/bin/left-undone` (essa pasta deve estar no PATH).
-Não sobrescreve comandos/skills diferentes, não reinicia servidor e não instala em
-outras máquinas. Para retirar a skill, remova somente esses links simbólicos.
-O diretório antigo `things-undone-herdr` é um symlink para este projeto,
-preservando referências da sessão que iniciou o trabalho.
+O instalador verifica se o comando, as skills e o ID do plugin já pertencem a
+outra instalação. O desinstalador remove os links deste checkout e preserva
+as pendências, o diretório do projeto e as demais instalações.
 
 ## Estado e importação
 

@@ -136,7 +136,7 @@ class ActionTests(unittest.TestCase):
         import tempfile
         from pathlib import Path
         from left_undone.core import Store
-        from left_undone.ui import handle_action
+        from left_undone.ui import handle_action,DoneOffer,confirm_done
         with tempfile.TemporaryDirectory() as folder:
             db=Store(Path(folder)/'db','test');self.addCleanup(db.close)
             db.add('import','First task');db.add('import','Second task')
@@ -146,7 +146,8 @@ class ActionTests(unittest.TestCase):
             handle_action(('key','1'),db,db.items(),sent.append,export)
             self.assertEqual(sent,['You left this undone: First task']);self.assertEqual(len(db.items()),2)
             handle_action(('item',first['id']),db,db.items(),sent.append,export)
-            handle_action(('key','2'),db,db.items(),sent.append,export)
+            with self.assertRaises(DoneOffer) as offer:handle_action(('key','2'),db,db.items(),sent.append,export)
+            confirm_done(db,offer.exception)
             self.assertEqual([i['id'] for i in db.items()],[second['id']])
             handle_action(('key','3'),db,db.items(),sent.append,export)
             export.write_text(export.read_text()+'- [ ] Third task\n')

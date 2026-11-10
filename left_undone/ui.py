@@ -7,13 +7,31 @@ import subprocess
 import sys
 from pathlib import Path
 from .core import Store
-from .runtime import send, send_selected
+from .runtime import send, send_selected, queue, queue_selected, QueueOffer
 from .projects import project_store
-from .ui_layout import MouseInput, panel_layout, picker_layout, terminal_text
+from .ui_layout import (MouseInput, panel_layout, picker_layout, terminal_text,
+                        queue_confirmation_layout, done_confirmation_layout)
 from .collection_request import request_collection
 
 
 def page_items(items,page,size=26):return items[page*size:(page+1)*size]
+
+
+class DoneOffer(RuntimeError):
+    def __init__(self,chosen):
+        super().__init__('Confirme a conclusão dos itens selecionados')
+        self.items=tuple((item['id'],item['text']) for item in chosen)
+
+
+def confirm_done(store,offer):
+    with store.conn:
+        store.conn.execute('BEGIN IMMEDIATE')
+        current={item['id']:item for item in store.items()}
+        if any(item_id not in current or not current[item_id]['selected'] or
+               current[item_id]['text']!=text for item_id,text in offer.items):
+            raise RuntimeError('A seleção mudou. Revise os itens e confirme novamente.')
+        store.done([item_id for item_id,_ in offer.items])
+    return len(offer.items)
 
 
 def handle_key(key,store,visible,submit,export):
@@ -22,8 +40,9 @@ def handle_key(key,store,visible,submit,export):
         if index<len(visible):store.toggle(visible[index]['id'])
     elif key=='1':return f'Enviados: {send_selected(store,submit)}. Permanecem até conclusão.'
     elif key=='2':
-        ids=[i['id'] for i in store.items() if i['selected']];store.done(ids)
-        return f'Concluídos: {len(ids)}'
+        chosen=[i for i in store.items() if i['selected']]
+        if chosen:raise DoneOffer(chosen)
+        return 'Nenhum item selecionado.'
     elif key=='3':
         export.parent.mkdir(parents=True,exist_ok=True)
         export.write_text(store.export_md());return 'Exportado: '+str(export)
@@ -83,7 +102,7 @@ def panel(win,binding,root,binding_file):
     configure(win)
     db=project_store(root,binding)
     worker=subprocess.Popen([sys.executable,str(Path(__file__).resolve().parents[1]/'left-undone'),'collect','--binding',str(binding_file)],start_new_session=True)
-    page=0;notice='';export=root/'exports'/binding.key/'latest.md';mouse=MouseInput()
+    page=0;notice='';export=root/'exports'/binding.key/'latest.md';mouse=MouseInput();pending=None
     try:
         while True:
             h,w=win.getmaxyx();items=db.items()
@@ -92,12 +111,29 @@ def panel(win,binding,root,binding_file):
             if worker.poll() is not None:status='Coletor parou. Feche e reabra o painel. '+status
             subtitle=f'{binding.kind} · {binding.pane}'
             if getattr(db,'project',None):subtitle+=' · '+Path(db.project).name
-            layout=panel_layout(items,w,h,page,subtitle,status,notice)
-            page=layout.page;mouse.sync(layout);render(win,layout)
+            if pending:
+                build=done_confirmation_layout if isinstance(pending,DoneOffer) else queue_confirmation_layout
+                layout=build(w,h,len(pending.items))
+            else:layout=panel_layout(items,w,h,page,subtitle,status,notice)
+            if not pending:page=layout.page
+            mouse.sync(layout);render(win,layout)
             try:key=win.get_wch()
             except curses.error:continue
             action=input_action(key,mouse,layout)
             if not action:continue
+            if pending:
+                if action in (('close',None),('key','2')):
+                    notice=('Conclusão cancelada.' if isinstance(pending,DoneOffer) else 'Envio cancelado.')+' Seleção preservada.'
+                    pending=None
+                elif action==('key','1') and any(target.action==action for target in layout.targets):
+                    try:
+                        if isinstance(pending,DoneOffer):notice=f'Concluídos: {confirm_done(db,pending)}'
+                        else:
+                            count=queue_selected(db,pending,lambda text:queue(binding,text))
+                            notice=f'Na fila: {count}. Permanecem até conclusão.'
+                    except Exception as e:notice=str(e)
+                    pending=None
+                continue
             if action[0]=='close':break
             if action[0]=='next':page=min(page+1,layout.pages-1);continue
             if action[0]=='prev':page=max(0,page-1);continue
@@ -106,6 +142,10 @@ def panel(win,binding,root,binding_file):
                 except (OSError,RuntimeError) as e:notice=str(e)
                 continue
             try:notice=handle_action(action,db,layout.visible,lambda text:send(binding,text),export) or notice
+            except DoneOffer as offer:pending=offer
+            except QueueOffer as offer:
+                if binding.kind=='codex':pending=offer
+                else:notice='A fila do Claude não está disponível nesta versão. Aguarde o agente terminar.'
             except Exception as e:notice=str(e)
     finally:
         worker.terminate()

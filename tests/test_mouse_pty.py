@@ -88,8 +88,10 @@ curses.wrapper(ui.panel,Binding(**json.loads(file.read_text())),root,file)
                 time.sleep(.15);drain()
                 click(10,7)
                 wait_for(lambda:db.items()[0]['selected']==1)
-                # Keyboard completion remains compatible with mouse selection.
-                os.write(master,b'2');wait_for(lambda:len(db.items())==0)
+                # Keyboard completion must ask before changing the mouse selection.
+                os.write(master,b'2');wait_for(lambda:b'CONCLUIR TAREFAS' in output)
+                self.assertEqual(len(db.items()),1)
+                os.write(master,b'1');wait_for(lambda:len(db.items())==0)
                 os.write(master,b'\x1b');p.wait(timeout=5)
                 self.assertEqual(p.returncode,0)
             finally:
