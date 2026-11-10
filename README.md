@@ -30,8 +30,8 @@ O filtro usa a pasta inicial registrada na conversa e a raiz Git, inclusive
 quando executado em subpastas. Symlinks são resolvidos; worktrees permanecem
 separados. Em projetos sem Git, a correspondência é pela pasta exata.
 Se só houver conversas salvas sem sessão ativa, o comando orienta retomá-las.
-Retome a mesma conversa para recuperar sua lista; uma sessão nova tem outra lista.
-O filtro não junta tarefas nem altera a validação do destinatário.
+Uma sessão nova no mesmo projeto reencontra as tarefas compartilhadas. Promessas
+continuam na conversa de origem. O projeto não substitui a validação do destinatário.
 
 O painel aceita mouse: clique em uma tarefa para selecionar e use os botões
 Enviar/Concluir. Exportar, Importar, páginas e Fechar também são clicáveis.
@@ -75,9 +75,24 @@ preservando referências da sessão que iniciou o trabalho.
 ## Estado e importação
 
 Estado local em `~/.local/state/left-undone-herdr/` (ou XDG_STATE_HOME).
-`LEFT_UNDONE_STATE_DIR` permite outro diretório. SQLite usa WAL; cada sessão
-é isolada por agente + diretório da conta + UUID. Arquivos são privados ao
-usuário. Fechar o painel preserva pendências, seleção e posição da coleta.
+`LEFT_UNDONE_STATE_DIR` permite outro diretório. SQLite usa WAL. As tarefas
+nativas e os checklists importados são compartilhados entre sessões do mesmo
+projeto, inclusive Codex e Claude. Promessas, seleção para envio e posição da
+coleta continuam por agente + conta + UUID. Concluir uma tarefa atualiza todos
+os painéis do projeto. Fechar painéis e criar novas sessões preserva as tarefas.
+Os dados são locais à máquina; esta versão não sincroniza listas entre PCs.
+
+O projeto padrão vem da raiz Git da pasta inicial da conversa, com worktrees
+separados. Sem Git, usa a pasta exata. Para uma conversa iniciada em outra pasta:
+
+```sh
+left-undone open --pane PANE --session UUID --project /caminho/do/projeto
+```
+
+A associação persiste. O cabeçalho mostra o projeto. Dados anteriores mantêm
+IDs, origem e baixas manuais; nenhum histórico é apagado. Snapshots de tarefas
+de uma sessão não encerram tarefas de outra. Sem histórico que identifique o
+projeto, a lista continua restrita à sessão até associação explícita.
 
 Exportação: `exports/<chave-da-sessão>/latest.md`, com cabeçalho `# Left undone`
 e linhas `- [ ] texto`, compatíveis com o plugin original. Importação aceita
@@ -126,6 +141,13 @@ PID/starttime, conta e histórico estruturado. Não deduz destinatário por foco
 visual, cwd ou ambiente herdado. Sessão ausente/ambígua fica indisponível;
 uma primeira resposta do agente pode ser necessária para o Herdr identificar
 seu UUID. A listagem explica panes indisponíveis.
+
+Para ferramentas Codex sem contexto Herdr ou conversas sem registro nativo,
+a skill agora usa `left-undone recover --marker LU-<32 dígitos hexadecimais>`.
+O agente publica uma marca nova em commentary; o comando cruza essa marca
+recente com histórico, painel visível, conta e processo, registra pelo hook
+nativo e verifica o resultado. Não envia mensagens nem reinicia processos.
+Essa recuperação pontual não detecta automaticamente trocas futuras de conversa.
 
 A conta vem do processo autenticado; instalações que compartilham históricos
 por symlink são suportadas. Mudanças de sessão/conta bloqueiam envio e coleta.

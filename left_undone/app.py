@@ -12,6 +12,7 @@ from .core import Collector,Store
 from .runtime import Analyzer,Binding,PLUGIN,candidates,herdr,verify
 from .ui import panel,picker
 from .repository import project_root,repository_sessions,saved_sessions,pending_counts
+from .projects import project_store
 
 
 def state_root():
@@ -47,9 +48,11 @@ def wait_collector(root,key):
         raise RuntimeError('Coletor anterior ainda encerrando; tente reabrir em instantes')
 
 
-def open_panel(binding):
+def open_panel(binding,project=None):
     verify(binding)
     root=state_root()
+    db=project_store(root,binding,project)
+    project=getattr(db,'project',None);db.close()
     with (root/(binding.key+'.open.lock')).open('w') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         mapping=root/(binding.key+'.pane.json')
@@ -60,7 +63,7 @@ def open_panel(binding):
             except RuntimeError:live={}
             if live.get('terminal_id')==old['terminal']:
                 previous=json.loads(file.read_text()) if file.exists() else {}
-                same=previous==asdict(binding)
+                same=previous==asdict(binding) and old.get('project')==project
                 starting=time.time()-old.get('created',0)<15
                 if same and (starting or panel_process_alive(old['pane'],file)):
                     return {'reused':True,'pane':old['pane']}
@@ -72,7 +75,7 @@ def open_panel(binding):
                      '--env','LEFT_UNDONE_BINDING='+str(file),'--env','LEFT_UNDONE_STATE_DIR='+str(root))
         info=result.get('plugin_pane',result).get('pane')
         if not info:raise RuntimeError('Herdr abriu painel mas retornou formato inesperado; não repita sem conferir')
-        record={'pane':info['pane_id'],'terminal':info['terminal_id'],'created':time.time()}
+        record={'pane':info['pane_id'],'terminal':info['terminal_id'],'created':time.time(),'project':project}
         atomic_json(mapping,record)
         return record
 
@@ -104,12 +107,17 @@ def collect(binding,root):
 def main():
     os.umask(0o077)
     parser=argparse.ArgumentParser(description='Left Undone para Herdr')
-    parser.add_argument('command',nargs='?',choices=['list','open','pick','panel','collect','export','import','items'],
+    parser.add_argument('command',nargs='?',choices=['list','open','pick','panel','collect','export','import','items','recover'],
                         help='Sem comando: abre as pendências do repo atual')
     parser.add_argument('--pane');parser.add_argument('--session');parser.add_argument('--binding',default=os.environ.get('LEFT_UNDONE_BINDING'))
     parser.add_argument('--file',type=Path)
+    parser.add_argument('--marker',help='Marca fresca publicada em commentary para recuperar a identidade Codex')
+    parser.add_argument('--project',type=Path,help='Associar esta conversa explicitamente ao projeto (open --pane --session)')
     parser.add_argument('--repo',type=Path,help='Filtrar sessões pela raiz Git desta pasta (sem Git: pasta exata)')
     args=parser.parse_args()
+    if args.project is not None and (args.command!='open' or not args.pane or not args.session or args.repo is not None):
+        parser.error('--project exige open --pane --session, sem --repo')
+    if args.project is not None and not args.project.expanduser().is_dir():parser.error('Pasta do projeto não existe')
     if args.command is None:
         args.command='open'
         if not args.pane and not args.session and args.repo is None:args.repo=Path.cwd()
@@ -119,13 +127,16 @@ def main():
         args.repo=Path(os.environ['LEFT_UNDONE_REPO'])
     try:
         root=state_root()
+        if args.command=='recover':
+            from .recovery import recover
+            print(json.dumps(asdict(recover(args.marker)),ensure_ascii=False,indent=2));return
         if args.command in ('list','open','pick'):
             bs,errors=candidates()
             repo=None
             if args.repo is not None:
                 if not args.repo.expanduser().is_dir():raise RuntimeError('Pasta do repo não existe: '+str(args.repo))
                 repo=project_root(args.repo)
-                bs=repository_sessions(bs,repo)
+                bs=repository_sessions(bs,repo,root)
             if args.command=='list':
                 print(json.dumps({'sessions':[asdict(b) for b in bs],'unavailable':errors},ensure_ascii=False,indent=2));return
             if repo is not None:
@@ -143,7 +154,7 @@ def main():
             if args.pane and args.session:
                 matches=[b for b in bs if b.pane==args.pane and b.session==args.session]
                 if len(matches)!=1:raise RuntimeError('Pane/sessão não verificável: '+'; '.join(errors))
-                print(json.dumps(open_panel(matches[0])));return
+                print(json.dumps(open_panel(matches[0],args.project) if args.project is not None else open_panel(matches[0])));return
             if args.pane or args.session:raise RuntimeError('Informe --pane e --session juntos')
             if repo is not None and len(bs)==1:
                 print(json.dumps(open_panel(bs[0])));return
@@ -164,7 +175,7 @@ def main():
             except KeyboardInterrupt:pass
         elif args.command=='collect':collect(binding,root)
         else:
-            db=Store(root/'state.db',binding.key)
+            db=project_store(root,binding)
             try:
                 file=args.file or root/'exports'/binding.key/'latest.md'
                 if args.command=='items':print(json.dumps(db.items(),ensure_ascii=False,indent=2))

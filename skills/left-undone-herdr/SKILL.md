@@ -22,9 +22,24 @@ Invocado sem TTY pelas ferramentas do agente, abre em split no Herdr; nunca popu
 continua abrindo o seletor global. Em subpastas usa raiz Git; sem Git usa pasta
 exata; cada worktree é separado. A pasta inicial vem do histórico da sessão.
 Conversas salvas sem sessão ativa precisam ser retomadas no agente.
-A pasta só filtra candidatos: identidade para abrir/enviar continua por UUID,
+A pasta define a lista compartilhada e filtra candidatos; identidade para abrir/enviar continua por UUID,
 conta e processo. Se o usuário pedir esta conversa, use o vínculo exato abaixo,
 mesmo que o diretório de trabalho da ferramenta esteja em outro projeto.
+
+## Listas por projeto
+
+Tarefas nativas e itens importados aparecem nas sessões do mesmo projeto;
+promessas continuam privadas à conversa de origem. Concluir uma tarefa afeta
+todos os painéis do projeto. Selecionar para enviar é privado à conversa.
+O estado continua local à máquina e sobrevive a novas sessões.
+Por padrão, o projeto é a raiz Git do cwd inicial verificado (ou pasta exata).
+Se a conversa começou em outra pasta mas trata de um projeto identificado pelo
+usuário, associe explicitamente com `python3 scripts/left-undone open --pane PANE
+--session UUID --project /caminho/do/projeto`. Essa associação persiste. Nunca
+use `--project` para adivinhar qual é o destinatário. Não altere a associação de
+outras conversas sem evidência de que pertencem ao projeto.
+Após trocar /new ou /resume, a atualização automática do destinatário ainda
+está pendente: compartilhar a lista não corrige o UUID nativo obsoleto.
 
 ## Abrir uma conversa identificada
 
@@ -87,16 +102,19 @@ Execute `list` antes de mandar a pessoa reabrir a conversa.
 Se a sessão não estiver registrada, confira `herdr integration status`.
 Instalar a integração Codex (`herdr integration install codex`) faz parte da
 instalação autorizada do plugin; não reinicie o Herdr nem o Codex.
-Uma conversa já aberta pode precisar de registro inicial: confirme o UUID
-real de `CODEX_THREAD_ID` no histórico da conta; publique uma marca aleatória
-em uma mensagem de commentary e confira essa marca tanto no histórico
-como no conteúdo **visível** do painel. Confira também o PID foreground e
-seu ambiente em `/proc/PID/environ`. Só com essas evidências concordantes,
-execute o hook nativo `~/.codex/herdr-agent-state.sh session` com o ambiente
-desse processo e o JSON SessionStart contendo o UUID e transcript_path reais.
-Confira o UUID retornado por `herdr agent get` e rode `list` novamente.
-Se houver divergência ou ambiguidade, não registre nem envie: solicite que
-a pessoa identifique a conversa. Não use título, pasta ou foco como vínculo.
+Uma conversa já aberta pode precisar de registro inicial. Gere uma marca nova
+com `python3 -c 'import uuid; print("LU-"+uuid.uuid4().hex)'`, publique-a em uma
+mensagem de commentary e execute logo em seguida
+`python3 scripts/left-undone recover --marker LU-<32 dígitos hexadecimais>`.
+Não reutilize uma marca de exemplo. O comando exige `CODEX_THREAD_ID` real,
+marca de commentary no histórico da conta com até cinco minutos, a mesma marca
+no conteúdo **visível** de exatamente um painel, PID foreground e ambiente
+concordantes. Ele invoca o hook nativo e confere o registro. Não envia prompts.
+Use o pane/UUID retornado para abrir e confira `list` novamente.
+Se a marca saiu da tela, publique uma nova e tente a recuperação novamente.
+Em divergência/ambiguidade, não improvise um registro manual nem envie.
+Essa recuperação pontual não corrige futuras trocas /new ou /resume.
+Não use título, pasta ou foco como vínculo.
 Não altere a skill genérica embutida no binário Herdr.
 
 ## Checklist solicitado pelo usuário

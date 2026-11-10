@@ -47,7 +47,7 @@ class RepositoryTests(unittest.TestCase):
             Path(b.history).write_text(json.dumps(row)+'\n')
             self.assertIsNone(session_project(b))
 
-    def test_saved_sessions_and_counts_remain_separate(self):
+    def test_saved_sessions_and_counts_share_tasks_but_not_promises(self):
         from left_undone.repository import saved_sessions,pending_counts
         a=self.binding();b=self.binding('s2');other=self.binding('s3',cwd=self.other)
         for binding in [a,b,other]:
@@ -58,7 +58,20 @@ class RepositoryTests(unittest.TestCase):
         db.done([db.items()[1]['id']]);db.close()
         db=Store(self.state/'state.db',b.key);db.add('promise','second');db.add('promise','third');db.close()
         self.assertEqual({b.key for b in saved_sessions(self.state,self.repo)},{a.key,b.key})
-        self.assertEqual(pending_counts(self.state,[a,b,other]),{a.key:1,b.key:2,other.key:0})
+        self.assertEqual(pending_counts(self.state,[a,b,other]),{a.key:1,b.key:3,other.key:0})
+
+    def test_explicit_project_survives_discovery_and_missing_history_is_isolated(self):
+        from left_undone.projects import project_store
+        a=self.binding();b=self.binding('s2',cwd=self.other)
+        with_store=project_store(self.state,a,self.other)
+        with_store.import_md('- [ ] Moved project');with_store.close()
+        reopened=project_store(self.state,a)
+        self.assertEqual(reopened.project,str(self.other));reopened.close()
+        other=project_store(self.state,b)
+        self.assertEqual(other.items()[0]['text'],'Moved project');other.close()
+        missing=self.binding('missing');Path(missing.history).unlink()
+        isolated=project_store(self.state,missing)
+        self.assertEqual(isolated.items(),[]);isolated.close()
 
     def test_worktrees_stay_separate_and_git_environment_cannot_override_repo(self):
         from left_undone.repository import project_root,repository_sessions

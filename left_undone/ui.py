@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from .core import Store
 from .runtime import send, send_selected
+from .projects import project_store
 from .ui_layout import MouseInput, panel_layout, picker_layout, terminal_text
 
 
@@ -79,7 +80,7 @@ def input_action(key,mouse,layout):
 
 def panel(win,binding,root,binding_file):
     configure(win)
-    db=Store(root/'state.db',binding.key)
+    db=project_store(root,binding)
     worker=subprocess.Popen([sys.executable,str(Path(__file__).resolve().parents[1]/'left-undone'),'collect','--binding',str(binding_file)],start_new_session=True)
     page=0;notice='';export=root/'exports'/binding.key/'latest.md';mouse=MouseInput()
     try:
@@ -88,7 +89,9 @@ def panel(win,binding,root,binding_file):
             try:status=json.loads((root/(binding.key+'.status.json')).read_text()).get('message','')
             except (OSError,ValueError):status='Iniciando coleta…'
             if worker.poll() is not None:status='Coletor parou. Feche e reabra o painel. '+status
-            layout=panel_layout(items,w,h,page,f'{binding.kind} · {binding.pane}',status,notice)
+            subtitle=f'{binding.kind} · {binding.pane}'
+            if getattr(db,'project',None):subtitle+=' · '+Path(db.project).name
+            layout=panel_layout(items,w,h,page,subtitle,status,notice)
             page=layout.page;mouse.sync(layout);render(win,layout)
             try:key=win.get_wch()
             except curses.error:continue

@@ -43,9 +43,22 @@ def session_project(binding):
     return None
 
 
-def repository_sessions(bindings,repository):
+def binding_project(binding,state=None):
+    if state is not None and (Path(state)/'state.db').exists():
+        conn=None
+        try:
+            conn=sqlite3.connect((Path(state)/'state.db').resolve().as_uri()+'?mode=ro',uri=True,timeout=2)
+            row=conn.execute('SELECT project FROM project_sessions WHERE session=?',(binding.key,)).fetchone()
+            if row:return Path(row[0])
+        except sqlite3.Error:pass
+        finally:
+            if conn is not None:conn.close()
+    return session_project(binding)
+
+
+def repository_sessions(bindings,repository,state=None):
     root=project_root(repository)
-    return [b for b in bindings if session_project(b)==root]
+    return [b for b in bindings if binding_project(b,state)==root]
 
 
 def saved_sessions(state,repository):
@@ -53,18 +66,20 @@ def saved_sessions(state,repository):
     for file in Path(state).glob('*.binding.json'):
         try:result.append(Binding(**json.loads(file.read_text())))
         except (OSError,ValueError,TypeError):continue
-    return repository_sessions(result,repository)
+    return repository_sessions(result,repository,state)
 
 
 def pending_counts(state,bindings):
+    from .projects import project_store
     counts={b.key:0 for b in bindings}
     file=Path(state)/'state.db'
     if not file.exists():return counts
     try:
-        conn=sqlite3.connect(file.resolve().as_uri()+'?mode=ro',uri=True,timeout=2)
+        views=[]
         try:
-            for key in counts:
-                counts[key]=conn.execute("SELECT count(*) FROM items WHERE session=? AND status='open'",(key,)).fetchone()[0]
-        finally:conn.close()
+            for binding in bindings:views.append((binding.key,project_store(state,binding)))
+            for key,view in views:counts[key]=len(view.items())
+        finally:
+            for _,view in views:view.close()
     except sqlite3.Error:return {key:None for key in counts}
     return counts
