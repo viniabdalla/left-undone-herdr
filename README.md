@@ -111,19 +111,42 @@ Confira o UUID dentro do arquivo `.binding.json` para escolher a sessão.
 - Codex: eventos `task_complete` e chamadas bem-sucedidas de `update_plan`.
 - Claude: respostas `end_turn`, `TodoWrite`, `TaskCreate` e `TaskUpdate` após
   resultado da ferramenta; ignora sidechains.
-- Leitura incremental de JSONL, sem consumir linhas ainda incompletas;
-  eventos processados e cursor são gravados na mesma transação.
-- O analisador recebe só resposta final (até 12 mil caracteres finais) e
-  promessas abertas. JSON validado estritamente; até cinco novas promessas.
+- Leitura incremental de JSONL, sem consumir linhas ainda incompletas.
+  A curadoria grava alterações, histórico e evento processado na mesma transação;
+  o cursor avança depois. Repetir um evento não reaplica suas alterações.
+- Com projeto associado, o curador recebe resposta final (até 12 mil caracteres),
+  pedidos recentes (até 4 mil) e itens compactos do projeto. Ele adiciona tarefas,
+  atualiza descrições, conclui com evidência e consolida duplicatas semânticas.
+  Conflitos preservam o item e não impedem outras novidades. Itens de outras sessões
+  entram como contexto; tarefas nativas e promessas delas não são alteradas.
+- Checklists importados também podem ser concluídos automaticamente com evidência.
+  Ausência numa resposta ou num snapshot não prova conclusão. Baixas manuais são
+  preservadas; respostas antigas não sobrescrevem tarefas criadas/editadas depois.
+- Heartbeat de aproximadamente 3 segundos verifica novidades; IA só é chamada
+  por resposta final nova ou mudança da lista. Revisões são serializadas por
+  projeto e têm cache por sessão, sem chamadas em polling ocioso.
+- JSON validado, evidência textual, proteção contra resultado obsoleto e histórico
+  de ações. Até 50 ações por categoria e 500 itens de contexto; revisão incompleta
+  ou acima do limite aparece como erro e mantém o evento para nova tentativa.
+  Sem projeto identificado, permanece a análise antiga de promessas por sessão.
 - Codex usa **gpt-6-luna / low**. Claude usa **Haiku / low**. Ambos usam os
   CLIs autenticados da conta verificada, sem persistir sessões de análise,
-  sem contexto de projeto e sem hooks/MCP herdados.
-- Os modelos decidem promessas cumpridas/abandonadas; perguntas, obrigações
-  do usuário e descrições de trabalho já feito devem ser excluídas.
+  sem carregar arquivos do repo e sem hooks/MCP herdados. A lista do projeto é
+  enviada explicitamente como dados; o curador não executa tarefas.
 - Falha de autenticação, cota, timeout ou JSON mantém a lista e o cursor;
   o painel mostra erro e tenta novamente em 30 segundos. Fechar interrompe.
 - Ao abrir pela primeira vez, percorre o histórico existente: conversas
   longas podem exigir várias chamadas de análise. Fechar interrompe o custo.
+
+Para consultar a lista ou as últimas mudanças sem abrir outro painel:
+
+```sh
+left-undone items --binding CAMINHO.binding.json
+left-undone changes --binding CAMINHO.binding.json
+```
+
+O status do painel informa quantas mudanças foram aplicadas e quantos itens foram
+preservados. O histórico detalha sessão, evento, antes/depois e destino de duplicatas.
 
 ## Identidade e limites
 

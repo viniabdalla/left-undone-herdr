@@ -17,6 +17,7 @@ atualizado: 2026-11-10
 - [ ] Eliminar janela entre verificação e envio — depende de envio condicionado ao UUID na API Herdr
 
 ## Feito
+- [x] 2026-11-10 Curadoria automática do projeto com evidência, duplicatas semânticas, conflitos preservados e histórico de alterações
 - [x] 2026-11-10 Planejar e implementar tarefas/checklists persistentes por projeto; promessas privadas e seleção independente
 - [x] 2026-11-10 Recuperar conversas Codex sem UUID nativo com recover --marker, cruzando histórico, painel visível e processo
 - [x] 2026-11-10 Distribuir versão Git no omarchy2 e Omarchy novo por SSH; 53 testes em cada máquina; tropico-1 excluída a pedido

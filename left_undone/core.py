@@ -190,8 +190,9 @@ class ClaudeAdapter:
 
 
 class Collector:
-    def __init__(self, store, path, kind, analyze):
+    def __init__(self, store, path, kind, analyze, audit_handler=None):
         self.store=store;self.path=Path(path);self.analyze=analyze
+        self.audit_handler=audit_handler;self.kind=kind
         self.adapter=CodexAdapter() if kind=='codex' else ClaudeAdapter()
 
     def poll(self, limit=500):
@@ -206,12 +207,25 @@ class Collector:
                 try:row=json.loads(line)
                 except (ValueError,UnicodeError) as e:raise ValueError('Histórico contém linha JSON inválida; cursor preservado') from e
                 new=copy.deepcopy(state);new['offset']=f.tell()
+                # Only actual user messages; tool results and system/developer data
+                # never become task requests for the project curator.
+                message=row.get('payload',{}) if self.kind=='codex' else row.get('message',{})
+                user=(self.kind=='codex' and row.get('type')=='response_item' and message.get('type')=='message' and message.get('role')=='user') or (self.kind=='claude' and row.get('type')=='user' and not row.get('isSidechain') and not row.get('agentId'))
+                if user:
+                    content=message.get('content',[])
+                    text=content if isinstance(content,str) else '\n'.join(p.get('text','') for p in content if isinstance(p,dict) and p.get('type') in ('text','input_text'))
+                    if text.strip():new['request']=(new.get('request','')+'\n'+text).strip()[-4000:]
                 key=hashlib.sha256(line).hexdigest()
                 events=self.adapter.feed(row,new,key);audits={}
                 for event in events:
                     if event['kind']=='audit' and not self.store.seen(event['id']):
-                        opened=self.store.items('promise')
-                        value=self.analyze(event['reply'],[i['text'] for i in opened])
-                        audits[event['id']]=(opened,validate_audit(value,opened))
+                        if self.audit_handler:
+                            self.audit_handler(event['reply'],new.get('request',''),event['id'],row.get('timestamp'))
+                            audits[event['id']]=([],{'done':[],'add':[]})
+                        else:
+                            opened=self.store.items('promise')
+                            value=self.analyze(event['reply'],[i['text'] for i in opened])
+                            audits[event['id']]=(opened,validate_audit(value,opened))
+                    if event['kind']=='audit':new.pop('request',None)
                 self.store.commit_line(new,events,audits)
                 state=new

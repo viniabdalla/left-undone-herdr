@@ -181,7 +181,8 @@ def send_selected(store,submit):
 
 
 class Analyzer:
-    def __init__(self,binding,timeout=90):self.binding=binding;self.timeout=timeout
+    def __init__(self,binding,timeout=90,rules=RULES,schema=SCHEMA):
+        self.binding=binding;self.timeout=timeout;self.rules=rules;self.schema=schema
 
     def command(self,cwd,schema,answer):
         env={k:v for k,v in os.environ.items() if not k.startswith(('HERDR_','CLAUDE_CODE_','CODEX_','AI_MEMORY_','OPENAI_','ANTHROPIC_')) and k!='CLAUDECODE'}
@@ -190,7 +191,7 @@ class Analyzer:
         if self.binding.kind=='codex':
             env['CODEX_HOME']=self.binding.account
             argv=['codex','exec','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only',
-                  '--model','gpt-6-luna','-c','model_reasoning_effort="low"','-c','developer_instructions='+json.dumps(RULES),
+                  '--model','gpt-6-luna','-c','model_reasoning_effort="low"','-c','developer_instructions='+json.dumps(self.rules),
                   '-c','features.shell_tool=false','-c','features.unified_exec=false','-c','features.multi_agent=false',
                   '-c','features.hooks=false','-c','features.skip_host_skill_discovery=true','-c','web_search="disabled"',
                   '--output-schema',str(schema),'--output-last-message',str(answer),'-']
@@ -198,19 +199,22 @@ class Analyzer:
             env['CLAUDE_CONFIG_DIR']=self.binding.account
             argv=['claude','-p','--model','haiku','--effort','low','--no-session-persistence','--tools','',
                   '--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','',
-                  '--settings','{"disableAllHooks":true}','--system-prompt',RULES,
-                  '--output-format','json','--json-schema',json.dumps(SCHEMA)]
+                  '--settings','{"disableAllHooks":true}','--system-prompt',self.rules,
+                  '--output-format','json','--json-schema',json.dumps(self.schema)]
         return argv,env
 
     def __call__(self,reply,opened):
+        return validate_audit(self.request({'open_promises':opened,'reply':reply[-12000:]}),opened)
+
+    def request(self,payload):
         with tempfile.TemporaryDirectory(prefix='left-undone-analyzer-') as folder:
             root=Path(folder);schema=root/'schema.json';answer=root/'answer.json'
-            schema.write_text(json.dumps(SCHEMA))
+            schema.write_text(json.dumps(self.schema))
             argv,env=self.command(root,schema,answer)
             p=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                                text=True,cwd=root,env=env,start_new_session=True)
             try:
-                stdout,stderr=p.communicate(json.dumps({'open_promises':opened,'reply':reply[-12000:]},ensure_ascii=False),timeout=self.timeout)
+                stdout,stderr=p.communicate(json.dumps(payload,ensure_ascii=False),timeout=self.timeout)
             except BaseException:
                 os.killpg(p.pid,signal.SIGTERM)
                 try:p.communicate(timeout=3)
@@ -225,4 +229,4 @@ class Analyzer:
                 if response.get('is_error'):raise RuntimeError('Claude: falha de autenticação/limite/modelo')
                 value=response.get('structured_output')
                 if value is None:value=json.loads(response.get('result',''))
-            return validate_audit(value,opened)
+            return value

@@ -13,6 +13,7 @@ from .runtime import Analyzer,Binding,PLUGIN,candidates,herdr,verify
 from .ui import panel,picker
 from .repository import project_root,repository_sessions,saved_sessions,pending_counts
 from .projects import project_store
+from .curation import Curator,CuratedStore,RULES as CURATOR_RULES,SCHEMA as CURATOR_SCHEMA
 
 
 def state_root():
@@ -86,8 +87,13 @@ def collect(binding,root):
     with (root/(binding.key+'.collector.lock')).open('w') as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return
-        db=Store(root/'state.db',binding.key)
-        collector=Collector(db,binding.history,binding.kind,Analyzer(binding))
+        view=project_store(root,binding)
+        curator=None
+        if getattr(view,'project',None):
+            model=Analyzer(binding,rules=CURATOR_RULES,schema=CURATOR_SCHEMA)
+            curator=Curator(view,model.request)
+        db=(CuratedStore if curator else Store)(root/'state.db',binding.key)
+        collector=Collector(db,binding.history,binding.kind,Analyzer(binding),curator.review if curator else None)
         status=root/(binding.key+'.status.json')
         try:
             while True:
@@ -95,19 +101,20 @@ def collect(binding,root):
                     verify(binding)
                     atomic_json(status,{'message':'Coletando…'})
                     collector.poll()
-                    atomic_json(status,{'message':'Coleta ativa · '+time.strftime('%H:%M:%S')})
+                    message=curator.refresh() if curator else 'Coleta ativa'
+                    atomic_json(status,{'message':message+' · '+time.strftime('%H:%M:%S')})
                     time.sleep(3)
                 except Exception as e:
                     atomic_json(status,{'message':'Erro: '+str(e)[:400]+' · nova tentativa em 30 s'})
                     time.sleep(30)
         except KeyboardInterrupt:pass
-        finally:db.close()
+        finally:db.close();view.close()
 
 
 def main():
     os.umask(0o077)
     parser=argparse.ArgumentParser(description='Left Undone para Herdr')
-    parser.add_argument('command',nargs='?',choices=['list','open','pick','panel','collect','export','import','items','recover'],
+    parser.add_argument('command',nargs='?',choices=['list','open','pick','panel','collect','export','import','items','recover','changes'],
                         help='Sem comando: abre as pendências do repo atual')
     parser.add_argument('--pane');parser.add_argument('--session');parser.add_argument('--binding',default=os.environ.get('LEFT_UNDONE_BINDING'))
     parser.add_argument('--file',type=Path)
@@ -179,6 +186,9 @@ def main():
             try:
                 file=args.file or root/'exports'/binding.key/'latest.md'
                 if args.command=='items':print(json.dumps(db.items(),ensure_ascii=False,indent=2))
+                elif args.command=='changes':
+                    if not getattr(db,'project',None):raise RuntimeError('Conversa sem projeto associado')
+                    print(json.dumps(Curator(db,None).changes(),ensure_ascii=False,indent=2))
                 elif args.command=='export':file.parent.mkdir(parents=True,exist_ok=True);file.write_text(db.export_md());print(file)
                 else:print('Importados:',db.import_md(file.read_text()))
             finally:db.close()

@@ -70,9 +70,20 @@ não pelo arquivo mais recente. `items --binding ...` mostra o estado.
 Importação é aditiva, ignora `[x]` e não reabre baixas manuais.
 
 Os analisadores usam o CLI autenticado da conta verificada: Claude Haiku,
-Codex gpt-6-luna com esforço low. Só recebem a resposta final e as promessas
-abertas. Não substitua por modelo maior nem reenvie a conversa inteira.
+Codex gpt-6-luna com esforço low. No projeto, recebem resposta final, pedidos
+recentes e itens compactos do projeto, incluindo outras sessões como contexto.
+Não substitua por modelo maior nem reenvie a conversa inteira.
 Falhas de login/limite/JSON aparecem no painel; não apagam a lista.
+
+A curadoria aplica automaticamente adições, atualizações, conclusões com
+evidência e consolidação de duplicatas. Conflitos preservam o item sem perguntar;
+novidades diferentes continuam entrando. Tarefas nativas/promessas de outras
+sessões não são alteradas. Não trate promessa privada alheia como substituta de
+uma tarefa compartilhada. Nenhuma tarefa é concluída por simples omissão.
+O heartbeat apenas verifica mudanças; não há chamada ao LLM em polling ocioso.
+Use `python3 scripts/left-undone changes --binding ARQUIVO` para conferir o
+histórico de alterações, e `items --binding` para listar sem abrir outro painel.
+A curadoria não corrige o destinatário obsoleto após /new ou /resume.
 
 Se a sessão não foi identificada pelo Herdr, explique a indisponibilidade.
 Não invente UUID, não use report-agent-session com ID deduzido do cwd e
@@ -123,8 +134,9 @@ Quando a pessoa pedir o painel com pendências já levantadas, abra o painel
 e importe um Markdown com `- [ ]` para cada item ainda aberto. Use o arquivo
 `.binding.json` cujo UUID corresponde à conversa escolhida e confira com
 `items --binding`. Instalação já concluída não entra como pendência.
-Itens importados têm baixa manual pela tecla 2; não prometa que o analisador
-vai concluir automaticamente esses itens. Verifique o painel renderizado
+Itens importados no projeto têm curadoria automática e também podem ser
+concluídos manualmente pela tecla 2. Confirme ações no histórico, não presuma
+que o modelo reconheceu uma conclusão. Verifique o painel renderizado
 com `herdr pane read` e uma captura antes de anunciar que está pronto.
 
 Se o plugin estiver ausente nesta máquina, use o projeto local e execute
