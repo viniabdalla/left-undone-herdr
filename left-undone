@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from left_undone.app import main
+main()

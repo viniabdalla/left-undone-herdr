@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+# Local validation captures include machine paths and session identifiers.
+docs/evidence/

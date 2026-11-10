@@ -1,0 +1,24 @@
+id = "left-undone"
+name = "Left Undone"
+version = "0.1.0"
+min_herdr_version = "0.9.1"
+description = "Pendências e promessas de uma conversa Codex ou Claude"
+platforms = ["linux"]
+
+[[actions]]
+id = "open"
+title = "Left Undone: abrir pendências"
+contexts = ["workspace", "pane"]
+command = ["python3", "left-undone", "open"]
+
+[[panes]]
+id = "panel"
+title = "Left Undone"
+placement = "split"
+command = ["python3", "left-undone", "panel"]
+
+[[panes]]
+id = "picker"
+title = "Left Undone: escolher conversa"
+placement = "split"
+command = ["python3", "left-undone", "pick"]
