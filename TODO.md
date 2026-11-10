@@ -9,6 +9,7 @@ atualizado: 2026-11-10
 # TODO — Left Undone Herdr
 
 ## Próximo
+- [ ] Ao enviar com o agente ocupado, perguntar se deseja colocar os itens na fila do harness
 - [ ] Planejar listas persistentes por projeto, compartilhadas entre conversas do mesmo projeto
 - [ ] Atualizar Left Undone nas outras máquinas via SSH a partir do repositório privado para uso nos projetos
 - [ ] Adicionar botão Coletar agora para disparar a coleta sob demanda
