@@ -125,7 +125,8 @@ def build_layout(items,width,height,page,subtitle,status,notice,picker=False,cur
         if items:labels.append(('[Abrir]',('open',None)))
     else:
         if selected:labels.extend([(f'[1 Enviar {selected}]',('key','1')),(f'[2 Concluir {selected}]',('key','2'))])
-        labels.extend([('[3 Exportar]',('key','3')),('[4 Importar]',('key','4'))])
+        labels.extend([('[3 Exportar]',('key','3')),('[4 Importar]',('key','4')),
+                       ('[5 Coletar agora]',('key','5'))])
     packed,button_rows=buttons(labels,usable)
     nav,nav_rows=buttons([('[<]',('prev',None)),('[>]',('next',None)),('[Fechar]',('close',None))],usable)
     # Compact status/notice before sacrificing the list or its action buttons.

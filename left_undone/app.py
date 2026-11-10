@@ -14,6 +14,7 @@ from .ui import panel,picker
 from .repository import project_root,repository_sessions,saved_sessions,pending_counts
 from .projects import project_store
 from .curation import Curator,CuratedStore,RULES as CURATOR_RULES,SCHEMA as CURATOR_SCHEMA
+from .collection_request import wait_for_collection
 
 
 def state_root():
@@ -95,18 +96,20 @@ def collect(binding,root):
         db=(CuratedStore if curator else Store)(root/'state.db',binding.key)
         collector=Collector(db,binding.history,binding.kind,Analyzer(binding),curator.review if curator else None)
         status=root/(binding.key+'.status.json')
+        request=root/(binding.key+'.collect-request')
         try:
             while True:
                 try:
+                    request.unlink(missing_ok=True)
                     verify(binding)
                     atomic_json(status,{'message':'Coletando…'})
                     collector.poll()
                     message=curator.refresh() if curator else 'Coleta ativa'
                     atomic_json(status,{'message':message+' · '+time.strftime('%H:%M:%S')})
-                    time.sleep(3)
+                    wait_for_collection(request,3)
                 except Exception as e:
                     atomic_json(status,{'message':'Erro: '+str(e)[:400]+' · nova tentativa em 30 s'})
-                    time.sleep(30)
+                    wait_for_collection(request,30)
         except KeyboardInterrupt:pass
         finally:db.close();view.close()
 

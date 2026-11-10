@@ -49,6 +49,7 @@ pelos controles normais do Herdr.
 | 2 | Marcar selecionados como concluídos |
 | 3 | Exportar pendências em Markdown |
 | 4 | Importar o último export desta sessão |
+| 5 | Coletar agora: solicitar uma rodada imediata ao coletor ativo |
 | ← / → | Trocar página |
 | Esc | Fechar painel e parar coleta |
 
@@ -108,6 +109,17 @@ Confira o UUID dentro do arquivo `.binding.json` para escolher a sessão.
 
 ## Coleta e modelos
 
+- As pendências escritas pelos analisadores usam o termo técnico como rótulo,
+  seguido da tarefa em linguagem simples, sem explicação longa. Exemplo:
+  “Codex /resume / UUID: reconhecer a conversa certa ao retomar.” Quando não
+  houver termo técnico útil, basta a tarefa simples. Isso vale para textos
+  novos ou atualizados pelo LLM; tarefas nativas e itens antigos não são
+  reescritos apenas para mudar o estilo.
+- O botão **Coletar agora** (tecla **5**) solicita uma rodada imediata,
+  inclusive durante a espera após erro. O status mostra andamento e resultado.
+  Pedidos repetidos são agrupados; durante uma análise, a solicitação aguarda
+  a rodada atual. A coleta automática continua ativa e a leitura permanece
+  incremental: respostas já processadas não são reanalisadas.
 - Codex: eventos `task_complete` e chamadas bem-sucedidas de `update_plan`.
 - Claude: respostas `end_turn`, `TodoWrite`, `TaskCreate` e `TaskUpdate` após
   resultado da ferramenta; ignora sidechains.

@@ -63,6 +63,12 @@ Letras selecionam itens. `1` envia os selecionados à conversa vinculada,
 sem retirá-los da lista. `2` conclui. `3` exporta. `4` importa o último arquivo
 exportado. Setas trocam páginas. Esc fecha; estado e seleção ficam salvos.
 
+O botão **Coletar agora** e a tecla `5` solicitam uma rodada imediata ao
+coletor existente, sem interromper a coleta automática. Pedidos repetidos são
+agrupados; se houver análise em andamento, aguardam essa rodada terminar.
+O pedido também interrompe a espera após erro, mantendo a validação da sessão.
+A leitura permanece incremental: eventos já processados não são reanalisados.
+
 Para arquivo escolhido: use `export` ou `import --file <arquivo>` junto com
 `--binding <arquivo .binding.json>`. O arquivo de vínculo é criado em
 `~/.local/state/left-undone-herdr/`; derive o correto pela sessão no JSON,

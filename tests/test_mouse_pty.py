@@ -16,6 +16,7 @@ from dataclasses import asdict
 from pathlib import Path
 from left_undone.core import Store
 from left_undone.runtime import Binding
+from left_undone.ui_layout import panel_layout
 
 class MousePTYTests(unittest.TestCase):
     def test_sgr_click_send_resize_and_keyboard_in_real_curses(self):
@@ -66,12 +67,23 @@ curses.wrapper(ui.panel,Binding(**json.loads(file.read_text())),root,file)
                 click(10,6)
                 wait_for(lambda:db.items()[0]['selected']==1)
                 wait_for(lambda:b'Enviar 1' in output)
-                # At 40x30, selected action buttons occupy row 27.
-                click(5,27)
+                layout=panel_layout(db.items(),40,30,0,'','','')
+                target=next(t for t in layout.targets if t.action==('key','1'))
+                click(target.x+1,target.y+1)
                 wait_for(lambda:sent.exists())
                 wait_for(lambda:db.items()[0]['selected']==0)
                 self.assertEqual(sent.read_text().count('You left this undone:'),1)
                 self.assertEqual(len(db.items()),1)
+                status=root/(b.key+'.status.json')
+                wait_for(lambda:status.exists() and 'Erro:' in json.loads(status.read_text())['message'])
+                before=status.stat().st_mtime_ns
+                os.write(master,b'5')
+                wait_for(lambda:status.stat().st_mtime_ns>before)
+                before=status.stat().st_mtime_ns
+                layout=panel_layout(db.items(),40,30,0,'','','')
+                target=next(t for t in layout.targets if t.action==('key','5'))
+                click(target.x+1,target.y+1)
+                wait_for(lambda:status.stat().st_mtime_ns>before)
                 fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',30,24,0,0));os.kill(p.pid,signal.SIGWINCH)
                 time.sleep(.15);drain()
                 click(10,7)

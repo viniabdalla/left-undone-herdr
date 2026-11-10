@@ -10,6 +10,7 @@ from .core import Store
 from .runtime import send, send_selected
 from .projects import project_store
 from .ui_layout import MouseInput, panel_layout, picker_layout, terminal_text
+from .collection_request import request_collection
 
 
 def page_items(items,page,size=26):return items[page*size:(page+1)*size]
@@ -100,6 +101,10 @@ def panel(win,binding,root,binding_file):
             if action[0]=='close':break
             if action[0]=='next':page=min(page+1,layout.pages-1);continue
             if action[0]=='prev':page=max(0,page-1);continue
+            if action==('key','5'):
+                try:notice=request_collection(worker,root/(binding.key+'.collect-request'))
+                except (OSError,RuntimeError) as e:notice=str(e)
+                continue
             try:notice=handle_action(action,db,layout.visible,lambda text:send(binding,text),export) or notice
             except Exception as e:notice=str(e)
     finally:

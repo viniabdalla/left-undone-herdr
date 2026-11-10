@@ -7,6 +7,15 @@ def item(i,text,selected=0):
     return {'id':i,'text':text,'selected':selected,'origin':'import'}
 
 class LayoutTests(unittest.TestCase):
+    def test_collect_button_is_clickable_without_selection_and_in_narrow_panel(self):
+        for width,height in ((18,13),(40,30),(80,24)):
+            for selected in (0,1):
+                layout=panel_layout([item(1,'Task',selected)],width,height,0,'','','')
+                target=next((t for t in layout.targets if t.action==('key','5')),None)
+                self.assertIsNotNone(target)
+                self.assertEqual(layout.hit(target.x,target.y),('key','5'))
+                self.assertIn(1,[i['id'] for i in layout.visible])
+
     def test_narrow_panel_wraps_complete_task_and_hit_target_covers_each_line(self):
         text='Uma tarefa longa com palavras suficientes para quebrar em várias linhas sem cortar o final.'
         layout=panel_layout([item(1,text)],27,40,0,'codex','Coleta ativa','')
