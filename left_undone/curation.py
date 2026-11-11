@@ -33,7 +33,19 @@ style: updates still need the evidence and ownership checks below. Apply this
 style to text only; evidence must remain an exact quote and all action/scope/
 completion rules remain unchanged.
 Add genuinely new actionable work, not duplicates, explanations, questions, hypothetical
-ideas, requests for approval, or work already completed. Use scope project for project
+ideas, requests for approval, or work already completed.
+A broad user goal such as "let's finish setting up X" is not itself a task; the
+concrete pending steps in the reply are the tasks.
+Lists: when the reply or request lists concrete pending items (numbered or bulleted),
+add each distinct actionable item as its own task, quoting that item as evidence.
+Never collapse distinct items into a generic umbrella task such as "finish what
+remains" or "complete the pending configuration". Never add an umbrella task at all.
+A broad existing item does not make concrete items duplicates; duplicates must mean
+the same specific action. evidence must be copied character for character from
+reply or request (plain text, keep backticks/asterisks exactly as they appear).
+owner: "agent" for work the assistant does or committed to; "user" for actions the
+reply explicitly assigns to the user to do themselves (physical, manual or only-you
+tasks). Pure decisions, questions or approvals for the user are not tasks. Use scope project for project
 work/checklists, session only for personal commitments specific to this conversation.
 How-to instructions, sample messages, suggested prompts and test walkthroughs are
 examples, not real pending work. If the user asks how to test, do not turn the
@@ -71,7 +83,8 @@ ID = {'type': 'integer', 'minimum': 1}
 SCHEMA = object_schema({
     'complete': {'type': 'boolean'},
     'add': {'type': 'array', 'maxItems': 50, 'items': object_schema({
-        'text': TEXT, 'scope': {'type': 'string', 'enum': ['project', 'session']}, 'evidence': TEXT})},
+        'text': TEXT, 'scope': {'type': 'string', 'enum': ['project', 'session']},
+        'owner': {'type': 'string', 'enum': ['agent', 'user']}, 'evidence': TEXT})},
     'update': {'type': 'array', 'maxItems': 50, 'items': object_schema({'id': ID, 'text': TEXT, 'evidence': TEXT})},
     'done': {'type': 'array', 'maxItems': 50, 'items': object_schema({'id': ID, 'evidence': TEXT})},
     'duplicate': {'type': 'array', 'maxItems': 50, 'items': object_schema({'id': ID, 'keep': ID})},
@@ -95,7 +108,8 @@ def validate(value, context):
             if kind == 'conflicts':
                 if type(row) is not int or row not in ids:raise ValueError('Curador: conflito desconhecido')
                 continue
-            if not isinstance(row, dict) or set(row) != set(spec['items']['properties']):
+            # owner is optional for add (defaults to agent).
+            if not isinstance(row, dict) or set(row) - {'owner'} != set(spec['items']['properties']) - {'owner'}:
                 raise ValueError('Curador: ação malformada')
             for key in ('id', 'keep'):
                 if key in row and (type(row[key]) is not int or row[key] not in ids):
@@ -110,9 +124,24 @@ def validate(value, context):
                 raise ValueError('Curador: alteração sem evidência no evento')
             if kind == 'add' and row['scope'] not in ('project', 'session'):
                 raise ValueError('Curador: escopo inválido')
+            if kind == 'add' and row.get('owner', 'agent') not in OWNERS:
+                raise ValueError('Curador: responsável inválido')
     keep_ids = {row['keep'] for row in value['duplicate']}
     if keep_ids & touched:raise ValueError('Curador: destino de duplicata também seria alterado')
     return value
+
+
+OWNERS = {'agent': '', 'user': 'VOCÊ · '}
+
+
+def owner_prefix(text):
+    return OWNERS['user'] if text.startswith(OWNERS['user']) else ''
+
+
+def strip_owner(text):
+    text = str(text).strip()
+    while text.startswith(OWNERS['user']):text = text[len(OWNERS['user']):].strip()
+    return text
 
 
 class StaleReview(RuntimeError):
@@ -255,7 +284,8 @@ class Curator:
                     if old['id'] in conflicts or not old['writable'] or old['status'] != 'open' or old['dismissed']:
                         ignored += 1;continue
                     if kind == 'update':
-                        text = clean(action['text'])
+                        # The curator rewrites wording, never who owns the task.
+                        text = clean(owner_prefix(old['text']) + strip_owner(action['text']))
                         if any(i['canonical'] and i['id'] != old['id'] and i['text'].casefold() == text.casefold() for i in self.snapshot()):
                             ignored += 1;continue
                         if text == old['text']:continue
@@ -270,7 +300,7 @@ class Curator:
                         log(kind, old['id'], old['text'], old['text'], keep['id'] if keep else None)
             known = {i['text'].casefold() for i in self.snapshot() if i['canonical']}
             for action in result['add']:
-                text = clean(action['text'])
+                text = clean(OWNERS[action.get('owner', 'agent')] + strip_owner(action['text']))
                 if text.casefold() in known:ignored += 1;continue
                 scope = action['scope'];owner = self.store.owner if scope == 'project' else self.store.session
                 origin = 'task' if scope == 'project' else 'promise'

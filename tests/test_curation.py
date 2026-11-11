@@ -249,3 +249,24 @@ class CurationTests(unittest.TestCase):
         result=prose_evidence('Exemplo:\n> ```text\n> Criar tela fictícia\n> ```\nSem tarefa nova.')
         self.assertNotIn('Criar tela fictícia',result)
         self.assertIn('Sem tarefa nova.',result)
+
+    def test_user_tasks_are_labeled_and_keep_label_on_rewrite(self):
+        curator = self.curator(lambda _: decisions(add=[
+            {'scope': 'project', 'owner': 'user', 'text': 'Reservar o IP do NAS no roteador', 'evidence': 'Reserve the NAS IP'},
+            {'scope': 'project', 'owner': 'agent', 'text': 'Enviar os repositórios ao NAS', 'evidence': 'push the repos'}]))
+        curator.review('Reserve the NAS IP on the router. I will push the repos.', '', 'e1')
+        texts = {i['text'] for i in self.b.items()}
+        self.assertEqual(texts, {'VOCÊ · Reservar o IP do NAS no roteador', 'Enviar os repositórios ao NAS'})
+        user = next(i for i in self.b.items() if i['text'].startswith('VOCÊ'))
+        curator.analyze = lambda _: decisions(update=[{'id': user['id'], 'text': 'Roteador: reservar o IP fixo do NAS',
+                                                       'evidence': 'Reserve the NAS IP'}])
+        curator.review('Reserve the NAS IP still pending.', '', 'e2')
+        self.assertIn('VOCÊ · Roteador: reservar o IP fixo do NAS', {i['text'] for i in self.b.items()})
+
+    def test_model_supplied_label_is_not_doubled_and_bad_owner_is_rejected(self):
+        curator = self.curator(lambda _: decisions(add=[
+            {'scope': 'project', 'owner': 'user', 'text': 'VOCÊ · Testar SMB', 'evidence': 'Test SMB'}]))
+        curator.review('Test SMB on the laptop.', '', 'e1')
+        self.assertEqual([i['text'] for i in self.b.items()], ['VOCÊ · Testar SMB'])
+        curator.analyze = lambda _: decisions(add=[{'scope': 'project', 'owner': 'boss', 'text': 'X', 'evidence': 'Test SMB'}])
+        with self.assertRaises(ValueError):curator.review('Test SMB again.', '', 'e2')

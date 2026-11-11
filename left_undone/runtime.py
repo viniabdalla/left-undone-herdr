@@ -251,8 +251,8 @@ def queue(binding,text):
 
 
 class Analyzer:
-    def __init__(self,binding,timeout=90,rules=RULES,schema=SCHEMA):
-        self.binding=binding;self.timeout=timeout;self.rules=rules;self.schema=schema
+    def __init__(self,binding,timeout=90,rules=RULES,schema=SCHEMA,effort='low'):
+        self.binding=binding;self.timeout=timeout;self.rules=rules;self.schema=schema;self.effort=effort
 
     def command(self,cwd,schema,answer):
         env={k:v for k,v in os.environ.items() if not k.startswith(('HERDR_','CLAUDE_CODE_','CODEX_','AI_MEMORY_','OPENAI_','ANTHROPIC_')) and k!='CLAUDECODE'}
@@ -261,13 +261,13 @@ class Analyzer:
         if self.binding.kind=='codex':
             env['CODEX_HOME']=self.binding.account
             argv=['codex','exec','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only',
-                  '--model','gpt-6-luna','-c','model_reasoning_effort="low"','-c','developer_instructions='+json.dumps(self.rules),
+                  '--model','gpt-6-luna','-c','model_reasoning_effort="'+self.effort+'"','-c','developer_instructions='+json.dumps(self.rules),
                   '-c','features.shell_tool=false','-c','features.unified_exec=false','-c','features.multi_agent=false',
                   '-c','features.hooks=false','-c','features.skip_host_skill_discovery=true','-c','web_search="disabled"',
                   '--output-schema',str(schema),'--output-last-message',str(answer),'-']
         else:
             env['CLAUDE_CONFIG_DIR']=self.binding.account
-            argv=['claude','-p','--model','haiku','--effort','low','--no-session-persistence','--tools','',
+            argv=['claude','-p','--model','haiku','--effort',self.effort,'--no-session-persistence','--tools','',
                   '--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','',
                   '--settings','{"disableAllHooks":true}','--system-prompt',self.rules,
                   '--output-format','json','--json-schema',json.dumps(self.schema)]
