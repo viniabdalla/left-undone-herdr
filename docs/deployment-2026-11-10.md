@@ -43,3 +43,11 @@ python3 install.py
 
 Feche e reabra painéis existentes para carregar a nova implementação. As listas
 são locais e ficam fora do checkout; atualizar código não sincroniza listas.
+
+### 2026-11-11
+
+tropico-2, omarchy2 e Omarchy novo atualizados para `70b61a3` com
+`git pull --ff-only` e `python3 install.py`. Suíte passou nas três (no Omarchy
+novo, 1 teste pulado pelo ambiente). Painéis abertos precisam ser fechados e
+reabertos para carregar a nova versão. A correção do Codex após /new e /resume
+segue só no branch `fix/codex-active-thread`, fora das instalações.

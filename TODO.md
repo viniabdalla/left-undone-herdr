@@ -22,6 +22,7 @@ atualizado: 2026-11-11
 - [ ] Eliminar janela entre verificação e envio — depende de envio condicionado ao UUID na API Herdr
 
 ## Feito
+- [x] 2026-11-11 Atualizar tropico-2, omarchy2 e Omarchy novo para 70b61a3 (git pull + install.py; testes OK nas três)
 - [x] 2026-11-11 Criar CLAUDE.md com comandos e arquitetura (identidade, coleta, curadoria, armazenamento)
 - [x] 2026-11-11 Curador: separar listas de pendências em itens (sem tarefa guarda-chuva) e marcar tarefas do usuário com VOCÊ
 - [x] 2026-11-10 Seletor de conversas mostra os títulos dos painéis do Herdr junto dos IDs
@@ -31,4 +32,3 @@ atualizado: 2026-11-11
 - [x] 2026-11-10 Adicionar botão Coletar agora e tecla 5, com pedidos agrupados ao coletor ativo e retomada imediata após erro
 - [x] 2026-11-10 Curadoria automática do projeto com evidência, duplicatas semânticas, conflitos preservados e histórico de alterações
 - [x] 2026-11-10 Planejar e implementar tarefas/checklists persistentes por projeto; promessas privadas e seleção independente
-- [x] 2026-11-10 Recuperar conversas Codex sem UUID nativo com recover --marker, cruzando histórico, painel visível e processo
