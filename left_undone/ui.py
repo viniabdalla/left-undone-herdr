@@ -10,7 +10,7 @@ from .core import Store
 from .runtime import send, send_selected, queue, queue_selected, QueueOffer
 from .projects import project_store
 from .ui_layout import (MouseInput, panel_layout, picker_layout, terminal_text,
-                        queue_confirmation_layout, done_confirmation_layout)
+                        queue_confirmation_layout, done_confirmation_layout, readable_panel_layout, project_label)
 from .collection_request import request_collection
 
 
@@ -79,7 +79,7 @@ def put(win,y,text,attr=0,x=0):
 
 
 def render(win,layout):
-    styles={'normal':0,'title':curses.A_BOLD,'selected':curses.A_REVERSE|curses.A_BOLD,'button':curses.A_REVERSE}
+    styles={'normal':0,'title':curses.A_BOLD,'selected':curses.A_REVERSE|curses.A_BOLD,'button':curses.A_REVERSE,'dim':curses.A_DIM}
     win.erase()
     for line in layout.lines:put(win,line.y,line.text,styles[line.style],line.x)
     win.refresh()
@@ -101,11 +101,12 @@ def input_action(key,mouse,layout):
 def panel(win,binding,root,binding_file):
     configure(win)
     db=project_store(root,binding)
+    home_db=db;history=False;projects=None;project_cursor=0
     worker=subprocess.Popen([sys.executable,str(Path(__file__).resolve().parents[1]/'left-undone'),'collect','--binding',str(binding_file)],start_new_session=True)
-    page=0;notice='';export=root/'exports'/binding.key/'latest.md';mouse=MouseInput();pending=None
+    page=0;notice='';export=root/'exports'/binding.key/'latest.md';mouse=MouseInput();pending=None;newest_first=True
     try:
         while True:
-            h,w=win.getmaxyx();items=db.items()
+            h,w=win.getmaxyx();items=db.history_items() if history else db.items()
             try:status=json.loads((root/(binding.key+'.status.json')).read_text()).get('message','')
             except (OSError,ValueError):status='Iniciando coleta…'
             if worker.poll() is not None:status='Coletor parou. Feche e reabra o painel. '+status
@@ -114,13 +115,33 @@ def panel(win,binding,root,binding_file):
             if pending:
                 build=done_confirmation_layout if isinstance(pending,DoneOffer) else queue_confirmation_layout
                 layout=build(w,h,len(pending.items))
-            else:layout=panel_layout(items,w,h,page,subtitle,status,notice)
+            elif projects is not None:
+                rows=[{'id':i,'heading':project_label(p)+(' · atual' if p==db.project else ''),'text':p} for i,p in enumerate(projects)]
+                layout=picker_layout(rows,w,h,page,project_cursor,notice=f'Conversa: {binding.kind} · {binding.pane}',follow_cursor=True)
+                layout.lines[0].text='Escolha projeto'
+            elif getattr(db,'project',None):
+                layout=readable_panel_layout(items,w,h,page,db.project,status,notice,newest_first=newest_first,history=history,recipient=f'{binding.kind} · {binding.pane}')
+            else:layout=panel_layout(items,w,h,page,subtitle,status,notice,newest_first=newest_first)
             if not pending:page=layout.page
             mouse.sync(layout);render(win,layout)
             try:key=win.get_wch()
             except curses.error:continue
-            action=input_action(key,mouse,layout)
+            if projects is not None and key in (curses.KEY_UP,curses.KEY_DOWN):
+                project_cursor=max(0,min(len(projects)-1,project_cursor+(1 if key==curses.KEY_DOWN else -1)))
+                continue
+            if projects is not None and key in ('\n','\r'):action=('open',None)
+            else:action=input_action(key,mouse,layout)
             if not action:continue
+            if projects is not None:
+                if action[0]=='close':projects=None;page=0
+                elif action[0]=='choose':project_cursor=action[1]
+                elif action[0] in ('prev','next'):
+                    project_cursor=max(0,min(len(projects)-1,project_cursor+(1 if action[0]=='next' else -1)))
+                elif action[0]=='open' and projects:
+                    new=db.view_project(projects[project_cursor])
+                    if db is not home_db:db.close()
+                    db=new;projects=None;page=0;notice='';history=False
+                continue
             if pending:
                 if action in (('close',None),('key','2')):
                     notice=('Conclusão cancelada.' if isinstance(pending,DoneOffer) else 'Envio cancelado.')+' Seleção preservada.'
@@ -135,12 +156,22 @@ def panel(win,binding,root,binding_file):
                     pending=None
                 continue
             if action[0]=='close':break
+            if action==('key','8') and getattr(db,'project',None):
+                projects=db.available_projects();project_cursor=projects.index(db.project);page=0
+                continue
+            if action==('key','7') and getattr(db,'project',None):
+                history=not history;page=0;notice=''
+                continue
+            if action==('key','6'):
+                newest_first=not newest_first;page=0
+                continue
             if action[0]=='next':page=min(page+1,layout.pages-1);continue
             if action[0]=='prev':page=max(0,page-1);continue
             if action==('key','5'):
                 try:notice=request_collection(worker,root/(binding.key+'.collect-request'))
                 except (OSError,RuntimeError) as e:notice=str(e)
                 continue
+            if history:continue
             try:notice=handle_action(action,db,layout.visible,lambda text:send(binding,text),export) or notice
             except DoneOffer as offer:pending=offer
             except QueueOffer as offer:
@@ -152,6 +183,7 @@ def panel(win,binding,root,binding_file):
         try:worker.wait(timeout=7)
         except subprocess.TimeoutExpired:os.killpg(worker.pid,signal.SIGKILL);worker.wait()
         db.close()
+        if db is not home_db:home_db.close()
 
 
 def picker(win,bindings,errors,choose,counts=None,titles=None):

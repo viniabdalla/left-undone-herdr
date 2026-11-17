@@ -11,15 +11,17 @@ Python 3.10+, Herdr 0.9.1+ e o plugin local `left-undone` vinculado.
 O executável desta skill é `scripts/left-undone` (resolva relativo a este
 SKILL.md). Ele usa a mesma implementação do plugin, sem criar outro coletor.
 
-## Atalho pelo repo
+## Atalho e seletor de conversas
 
 O instalador também disponibiliza `left-undone` em `~/.local/bin`.
-Sem argumentos, filtra pelo repo da pasta atual: uma sessão ativa verificável
-abre diretamente, várias abrem o seletor do repo com contagens de pendências.
+Sem argumentos, sempre abre o seletor global das conversas verificáveis do
+Herdr, independentemente da pasta e mesmo com uma única conversa. Não selecione
+automaticamente uma conversa pelo cwd. A lista mostra títulos, IDs, conta e
+contagens de pendências.
 No terminal, o seletor ocupa o próprio terminal até escolher ou sair com Esc.
 Invocado sem TTY pelas ferramentas do agente, abre em split no Herdr; nunca popup.
-`left-undone open --repo <pasta>` permite indicar a pasta; `left-undone open`
-continua abrindo o seletor global. Em subpastas usa raiz Git; sem Git usa pasta
+`left-undone open --repo <pasta>` filtra explicitamente por pasta e abre direto
+se houver uma única conversa verificável; `left-undone open` é global. Em subpastas usa raiz Git; sem Git usa pasta
 exata; cada worktree é separado. A pasta inicial vem do histórico da sessão.
 Conversas salvas sem sessão ativa precisam ser retomadas no agente.
 A pasta define a lista compartilhada e filtra candidatos; identidade para abrir/enviar continua por UUID,
@@ -51,13 +53,22 @@ está pendente: compartilhar a lista não corrige o UUID nativo obsoleto.
    seleção no Herdr. Não use foco visual, cwd ou HERDR_PANE_ID herdado como
    prova da identidade. Não escolha outra conversa silenciosamente.
 3. A abertura cria um split à direita sem roubar foco, ou reencontra o painel
-   existente. O painel lê apenas o histórico da conversa vinculada.
+   existente, dando foco a ele mesmo em outra aba. O painel lê apenas o histórico da conversa vinculada.
 
 Clique na tarefa (qualquer linha) ou use a letra para selecionar. Botões
 Enviar e Concluir aparecem com a contagem dos selecionados. A roda do mouse
 e os botões < / > trocam páginas; Exportar, Importar e Fechar são clicáveis.
 Textos quebram na largura do painel; tarefas muito altas continuam em outra página.
 No seletor de conversas, clique na linha e depois em Abrir.
+
+Em projetos, o painel usa títulos destacados e descrições, em grupos Para a IA
+e Para você. O botão Projeto (`8`) troca somente a lista; o cabeçalho continua
+mostrando a conversa destinatária verificada. Promessas privadas de outros
+projetos/conversas não são exibidas. Histórico (`7`) é somente leitura e mostra
+motivos comprovados de encerramento, ou “Encerrada” para registros ambíguos.
+Ordem (`6`) alterna recentes/antigas; troca de projeto, histórico ou ordem volta
+à primeira página preservando seleções. Datas conhecidas são discretas; um único
+aviso resume datas antigas ausentes. Nunca invente datas ou motivos de baixa.
 
 Letras selecionam itens. `1` envia os selecionados à conversa vinculada,
 sem retirá-los da lista. `2` pede confirmação para concluir. `3` exporta. `4` importa o último arquivo

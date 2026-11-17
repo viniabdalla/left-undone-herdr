@@ -72,7 +72,16 @@ curses.wrapper(ui.panel,Binding(**json.loads(file.read_text())),root,file)
                 os.write(master,f'\x1b[<0;{x+1};{y+1}M\x1b[<0;{x+1};{y+1}m'.encode())
             try:
                 wait_for(lambda:contains('LEFT UNDONE'))
+                rows=[line for line in screen()['lines'] if 'IMPORTADO ·' in line]
+                self.assertIn('Segunda tarefa',rows[0])
+                key('6');wait_for(lambda:contains('Mais antigas primeiro'))
+                rows=[line for line in screen()['lines'] if 'IMPORTADO ·' in line]
+                self.assertIn('Primeira tarefa',rows[0])
                 key('a');wait_for(lambda:db.items()[0]['selected']==1)
+                key('6');wait_for(lambda:contains('Mais recentes primeiro'))
+                self.assertTrue(db.items()[0]['selected'])
+                click(('key','6'));wait_for(lambda:contains('Mais antigas primeiro'))
+                self.assertTrue(db.items()[0]['selected'])
                 wait_for(lambda:contains('Enviar 1'))
                 click(('key','1'));wait_for(lambda:contains('AGENTE OCUPADO'))
                 self.assertFalse((root/'queued').exists())
@@ -129,7 +138,7 @@ curses.wrapper(ui.panel,Binding(**json.loads(file.read_text())),root,file)
                 wait_for(lambda:contains('LEFT UNDONE'))
                 # Adding action buttons reflows page 2; choose stable item IDs,
                 # since the letter b may become the former a after that reflow.
-                targets=[t[2] for t in screen()['targets'] if t[2][0]=='item'][:2]
+                targets=list(dict.fromkeys(tuple(t[2]) for t in screen()['targets'] if t[2][0]=='item'))[:2]
                 click(tuple(targets[0]));wait_for(lambda:contains('Enviar 1'))
                 click(tuple(targets[1]));wait_for(lambda:contains('Enviar 2'))
                 self.assertEqual(sum(i['selected'] for i in db.items()),2)

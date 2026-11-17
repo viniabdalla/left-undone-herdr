@@ -10,32 +10,57 @@ from .repository import project_root, session_project
 
 
 class ProjectStore(Store):
-    def __init__(self, path, session, project):
+    def __init__(self, path, session, project, *, view=False):
         super().__init__(path, session)
+        self.path=path
         self.project = str(project)
         self.conn.executescript('''
             CREATE TABLE IF NOT EXISTS project_sessions (session TEXT PRIMARY KEY, project TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS project_selections (
                 viewer TEXT, item INTEGER, PRIMARY KEY(viewer,item));
+            CREATE TABLE IF NOT EXISTS project_catalog (project TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS item_closures (
+                item INTEGER PRIMARY KEY, reason TEXT NOT NULL, evidence TEXT NOT NULL);
             CREATE TRIGGER IF NOT EXISTS clear_project_selections
                 AFTER UPDATE OF status ON items WHEN NEW.status='done'
                 BEGIN DELETE FROM project_selections WHERE item=NEW.id; END;
         ''')
         with self.conn:
-            self.conn.execute('INSERT OR IGNORE INTO project_sessions VALUES(?,?)', (session, self.project))
-            self.project = self.conn.execute('SELECT project FROM project_sessions WHERE session=?', (session,)).fetchone()[0]
+            if not view:
+                self.conn.execute('INSERT OR IGNORE INTO project_sessions VALUES(?,?)', (session, self.project))
+                self.project = self.conn.execute('SELECT project FROM project_sessions WHERE session=?', (session,)).fetchone()[0]
+            self.conn.execute('INSERT OR IGNORE INTO project_catalog VALUES(?)',(self.project,))
         self.owner = 'project:' + hashlib.sha256(self.project.encode()).hexdigest()
 
     def scope(self):
-        return ("(items.session=? OR (items.origin IN ('task','import') AND "
+        return ("((items.session=? AND EXISTS(SELECT 1 FROM project_sessions WHERE session=? AND project=?)) OR (items.origin IN ('task','import') AND "
                 "(items.session=? OR items.session IN "
                 "(SELECT session FROM project_sessions WHERE project=?))))",
-                [self.session, self.owner, self.project])
+                [self.session, self.session, self.project, self.owner, self.project])
+
+    def available_projects(self):
+        return [r[0] for r in self.conn.execute('SELECT project FROM project_catalog UNION SELECT project FROM project_sessions ORDER BY project')]
+
+    def view_project(self,project):
+        return ProjectStore(self.path,self.session,project,view=True)
+
+    def history_items(self):
+        where,args=self.scope()
+        return [dict(r) for r in self.conn.execute('SELECT items.*, '
+            '(SELECT created_at FROM item_creation WHERE item=items.id) AS created_at, '
+            "COALESCE((SELECT reason FROM item_closures WHERE item=items.id),'Encerrada') AS closure_reason "
+            "FROM items WHERE status='done' AND "+where+' ORDER BY id DESC',args)]
+
+    def note_closure(self,item_id,reason,evidence):
+        where,args=self.scope()
+        with self.conn:
+            self.conn.execute('INSERT OR REPLACE INTO item_closures SELECT id,?,? FROM items '
+                "WHERE id=? AND status='done' AND "+where,[reason,evidence,item_id,*args])
 
     def items(self, origin=None):
         where, args = self.scope()
         if origin:where += ' AND items.origin=?';args.append(origin)
-        rows = self.conn.execute('SELECT items.*, EXISTS(SELECT 1 FROM project_selections '
+        rows = self.conn.execute('SELECT items.*, (SELECT created_at FROM item_creation WHERE item=items.id) AS created_at, EXISTS(SELECT 1 FROM project_selections '
             'WHERE viewer=? AND item=items.id) AS viewer_selected FROM items WHERE ' + where +
             " AND status='open' ORDER BY CASE origin WHEN 'task' THEN 0 ELSE 1 END,id", [self.session, *args])
         result = []

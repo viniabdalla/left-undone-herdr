@@ -11,17 +11,19 @@ abrir pendências**, ou peça ao Codex/Claude para usar a skill
 `left-undone-herdr`. A seleção mostra conversas com identidade verificável.
 
 ```sh
-left-undone                 # abre pelo repo da pasta atual
-left-undone open --repo .   # equivalente, também aceita outra pasta
+left-undone                 # seletor global de conversas do Herdr
+left-undone open --repo .   # filtro explícito por projeto
 ./left-undone list
 ./left-undone open          # seletor global, todos os repos
 # Para uma conversa identificada na listagem:
 ./left-undone open --pane PANE --session UUID
 ```
 
-O comando curto é instalado em `~/.local/bin/left-undone`. Execute dentro do
-Herdr, no repo da conversa: uma sessão ativa verificável abre diretamente;
-várias mostram um seletor com agente, pane, UUID, conta e número de pendências.
+O comando curto é instalado em `~/.local/bin/left-undone`. Execute de qualquer
+pasta dentro do Herdr: ele sempre mostra o seletor global, mesmo com uma única
+conversa verificável. Cada opção mostra título, agente, pane, UUID, conta e
+número de pendências. `--repo` filtra explicitamente por projeto e abre
+diretamente quando encontra uma única conversa verificável.
 As opções aparecem no próprio terminal onde você executou o comando; Enter ou
 Abrir escolhe a conversa, Esc volta ao shell. Não abre popup. Quando invocado
 por uma ferramenta do agente sem terminal interativo, o seletor abre em um
@@ -57,8 +59,8 @@ mudarem enquanto a pergunta estiver aberta, o pedido é recusado para revisão.
 Isso só altera a conclusão manual; a curadoria automática continua funcionando.
 
 A seleção explícita abre o painel à direita, mantendo o foco anterior.
-Aberturas repetidas reencontram o mesmo painel. Para interagir, foque o painel
-pelos controles normais do Herdr.
+Se o painel escolhido já existe, ele é reencontrado e recebe foco, inclusive
+quando está em outra aba.
 
 | Tecla | Ação |
 |---|---|
@@ -68,10 +70,32 @@ pelos controles normais do Herdr.
 | 3 | Exportar pendências em Markdown |
 | 4 | Importar o último export desta sessão |
 | 5 | Coletar agora: solicitar uma rodada imediata ao coletor ativo |
+| 6 | Alternar entre mais recentes e mais antigas primeiro |
+| 7 | Alternar entre pendências e histórico do projeto |
+| 8 | Escolher o projeto mostrado, mantendo a conversa destinatária |
 | ← / → | Trocar página |
 | Esc | Fechar painel e parar coleta |
 
-Os itens indicam origem **TAREFA**, **PROMESSA** ou **IMPORTADO**. A seleção
+Em projetos, o painel mostra blocos separados em **Para a IA** e **Para você**.
+Títulos aparecem em destaque, com descrição e data conhecida em linhas próprias.
+Datas antigas ausentes geram um único aviso discreto. O botão de projeto (`8`)
+altera apenas a lista exibida; a conversa destinatária permanece no cabeçalho e
+continua verificada antes do envio. Promessas privadas não aparecem em outros
+projetos. Cada seleção permanece associada aos IDs e à conversa que a fez.
+
+O botão **Histórico** (`7`) mostra os encerramentos sem permitir seleção/envio.
+Quando há um motivo comprovado de organização, ele aparece junto do título;
+registros antigos sem motivo conhecido mostram apenas “Encerrada”. A ordenação
+(`6`) começa pelas mais recentes e alterna para as mais antigas. Trocar projeto,
+ordem ou histórico volta à primeira página sem apagar seleções. O painel sem
+projeto continua com sua lista de promessas da conversa.
+
+Novas coletas usam a data do evento; importações usam a entrada local. Datas
+anteriores só são recuperadas de eventos comprovados. A organização explícita
+mantém os IDs, fontes, baixas e histórico; guarda antes/depois e evidência em
+`panel_organization`. Ela não substitui o motor de curadoria automática.
+
+Na lista sem projeto, os itens indicam origem **TAREFA**, **PROMESSA** ou **IMPORTADO**. A seleção
 persiste ao trocar página e fechar o painel. Itens enviados só saem quando
 concluídos pelo agente/analisador ou baixados manualmente.
 

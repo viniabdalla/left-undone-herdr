@@ -139,8 +139,11 @@ class ReopenTests(unittest.TestCase):
             root=Path(folder);b=Binding('codex','s','account','w1:p1','term','w1','log',10,'1')
             atomic_json(root/(b.key+'.binding.json'),asdict(b))
             atomic_json(root/(b.key+'.pane.json'),{'pane':'w1:p2','terminal':'panel-term','created':time.time()})
+            calls=[]
             def api(*args):
+                calls.append(args)
                 self.assertNotEqual(args[:3],('plugin','pane','open'))
                 return {'pane':{'pane_id':'w1:p2','terminal_id':'panel-term'}}
             with patch('left_undone.app.verify'),patch('left_undone.app.state_root',return_value=root),patch('left_undone.app.herdr',side_effect=api),patch('left_undone.app.panel_process_alive',return_value=False,create=True):
                 self.assertTrue(open_panel(b)['reused'])
+            self.assertIn(('plugin','pane','focus','w1:p2'),calls)

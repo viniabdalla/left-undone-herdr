@@ -1,7 +1,10 @@
 """Cell-aware terminal layouts and mouse hit testing, independent of curses I/O."""
 import curses
+import math
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 
 def char_width(char):
@@ -91,6 +94,19 @@ def buttons(labels,width):
     return out, y+1 if out else 0
 
 
+def creation_date(item):
+    stamp=item.get('created_at')
+    if type(stamp) not in (float,int) or not math.isfinite(stamp):return None
+    try:return datetime.fromtimestamp(stamp)
+    except (ValueError,OverflowError,OSError):return None
+
+
+def sort_items(items,newest_first=True):
+    direction=-1 if newest_first else 1
+    return sorted(items,key=lambda i:(creation_date(i) is None,
+        direction*i['created_at'] if creation_date(i) is not None else 0,direction*i['id']))
+
+
 def pages_for(items,width,rows,picker=False):
     pages=[[]];used=0
     for item in items:
@@ -98,6 +114,10 @@ def pages_for(items,width,rows,picker=False):
         text=item['text'] if picker else f'{origin} · {item["text"]}'
         line_width=width-(2 if picker else 6)
         lines=wrap_text(text,line_width)
+        if not picker:
+            created=creation_date(item)
+            date=created.strftime('%d/%m/%Y %H:%M') if created else 'data desconhecida'
+            lines.extend(wrap_text('Criada: '+date,line_width))
         if picker and item.get('heading'):
             heading=item['heading']
             if cell_width(terminal_text(heading))>line_width:
@@ -170,8 +190,12 @@ def build_layout(items,width,height,page,subtitle,status,notice,picker=False,cur
     return layout
 
 
-def panel_layout(items,width,height,page,subtitle,status,notice):
-    return build_layout(items,width,height,page,subtitle,status,notice)
+def panel_layout(items,width,height,page,subtitle,status,notice,newest_first=True):
+    layout=build_layout(sort_items(items,newest_first),width,height,page,subtitle,status,notice)
+    if width>=18 and any(t.action==('key','5') for t in layout.targets):
+        order=('Mais recentes primeiro' if newest_first else 'Mais antigas primeiro') if width>=28 else ('Recentes ↓' if newest_first else 'Antigas ↑')
+        layout.add(3,0,'[6 '+order+']','button',('key','6'))
+    return layout
 
 
 def confirmation_layout(width,height,count,title,question,confirm_label):
@@ -231,3 +255,95 @@ class MouseInput:
             armed=self.armed;self.armed=None
             if armed is not None and armed==target:return target
         return None
+
+
+def card_pages(items,width,rows,history=False):
+    """Paginate semantic blocks, retaining headings and every word of long cards."""
+    groups=[('ENCERRADAS',items)] if history else [
+        ('PARA A IA',[i for i in items if not i['text'].startswith('VOCÊ · ')]),
+        ('PARA VOCÊ',[i for i in items if i['text'].startswith('VOCÊ · ')])]
+    pages=[[]];active=None
+    def heading(label):
+        nonlocal active
+        if len(pages[-1])>=rows-1:pages.append([])
+        pages[-1].append((None,label,'title'));active=label
+    for label,group in groups:
+        label=f'{label} · {len(group)}'
+        heading(label)
+        if not group:
+            message='Nada depende de você agora.' if label.startswith('PARA VOCÊ') else 'Nenhuma pendência.'
+            if history:message='Nenhum item encerrado.'
+            for line in wrap_text(message,width-2):
+                if len(pages[-1])==rows:pages.append([]);heading(label)
+                pages[-1].append((None,line,'dim'))
+            continue
+        for item in group:
+            text=item['text'].removeprefix('VOCÊ · ')
+            title,separator,detail=text.partition(': ')
+            if history:title+=' · '+item.get('closure_reason','Encerrada')
+            lines=[(line,'title') for line in wrap_text(title,width-6)]
+            if separator:lines.extend((line,'normal') for line in wrap_text(detail,width-6))
+            created=creation_date(item)
+            if created:lines.extend((line,'dim') for line in wrap_text(created.strftime('%d/%m/%Y %H:%M'),width-6))
+            # A fitting card stays whole; long cards continue with the same ID.
+            count=len({r[0]['id'] for r in pages[-1] if r[0] is not None})
+            if count>=26 or (len(lines)+1<=rows-1 and len(pages[-1])+len(lines)>rows):
+                pages.append([]);heading(label)
+            for line,style in lines:
+                if len(pages[-1])==rows:pages.append([]);heading(label)
+                pages[-1].append((item,line,style))
+            if len(pages[-1])<rows:pages[-1].append((None,'','normal'))
+    return pages
+
+
+def project_label(project):
+    name=Path(project).name
+    if name.startswith('left-undone-herdr'):return 'Left Undone'
+    return {'git-todo-atlas':'Atlas'}.get(name,name)
+
+
+def readable_panel_layout(items,width,height,page,project,status,notice,newest_first=True,history=False,recipient=''):
+    if width<18 or height<16:
+        return build_layout([],width,min(height,11),0,'','','')
+    layout=Layout(width,height);usable=width-1
+    selected=0 if history else sum(bool(i.get('selected')) for i in items)
+    labels=[]
+    if selected:labels.extend([(f'[1 Enviar {selected}]',('key','1')),(f'[2 Concluir {selected}]',('key','2'))])
+    labels.extend([('[3 Exportar]',('key','3')),('[4 Importar]',('key','4')),('[5 Coletar]',('key','5'))])
+    if history:labels=[]
+    controls,control_rows=buttons(labels,usable)
+    navigation,nav_rows=buttons([('[<]',('prev',None)),('[>]',('next',None)),('[Fechar]',('close',None))],usable)
+    top,top_rows=buttons([('[6 Recentes ↓]' if newest_first else '[6 Antigas ↑]',('key','6')),
+                         ('[7 Pendências]' if history else '[7 Histórico]',('key','7'))],usable)
+    start=3+top_rows
+    unknown=sum(creation_date(i) is None for i in items)
+    footer=control_rows+nav_rows+2+(1 if unknown else 0)
+    room=height-footer-start
+    if room<3:
+        layout.add(0,0,'Aumente o painel');layout.add(height-1,0,'[Fechar]',action=('close',None));return layout
+    ordered=sort_items(items,newest_first)
+    pages=card_pages(ordered,usable,room,history)
+    page=max(0,min(page,len(pages)-1));layout.page=page;layout.pages=len(pages)
+    layout.add(0,0,('LEFT UNDONE' if not history else 'LEFT UNDONE · HISTÓRICO')+(' · '+recipient if recipient else ''),'title')
+    layout.add(1,0,'[8 Projeto: '+project_label(project)+']','button',('key','8'))
+    for y,x,label,action in top:layout.add(2+y,x,label,'button',action)
+    layout.add(2+top_rows,0,f'{len(items)} '+('encerradas' if history else 'pendências')+f' · página {page+1}/{len(pages)}','dim')
+    indices={};seen=set();y=start
+    for item,line,style in pages[page]:
+        if item is None:layout.add(y,0,line,style);y+=1;continue
+        first=item['id'] not in seen
+        if first:
+            indices[item['id']]=len(indices);seen.add(item['id']);layout.visible.append(item)
+        index=indices[item['id']]
+        prefix=('• ' if history else f'{chr(97+index)} [{"x" if item.get("selected") else " "}] ') if first else ('  ' if history else '      ')
+        action=None if history else ('item',item['id'])
+        layout.add(y,0,prefix+line,'selected' if item.get('selected') and not history else style,action,usable);y+=1
+    y=height-footer
+    if unknown:layout.add(y,0,f'{unknown} registros antigos sem data.','dim');y+=1
+    status=status.replace('Curadoria em dia','Coletor ativo')
+    layout.add(y,0,notice or status,'dim');y+=1
+    for row,x,label,action in controls:layout.add(y+row,x,label,'button',action)
+    y+=control_rows
+    for row,x,label,action in navigation:layout.add(y+row,x,label,'button',action)
+    layout.add(height-1,0,'Mouse / teclas','dim')
+    return layout

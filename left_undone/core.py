@@ -12,6 +12,13 @@ def clean(text):
     return ' '.join(str(text).split())[:240]
 
 
+def source_timestamp(value):
+    try:
+        parsed=datetime.fromisoformat(value.replace('Z','+00:00'))
+        return parsed.timestamp() if parsed.tzinfo is not None else None
+    except (AttributeError,ValueError,OverflowError,OSError):return None
+
+
 def validate_audit(value, opened):
     if not isinstance(value, dict) or set(value) != {'done', 'add'}:
         raise ValueError('Analisador: esperado JSON com done e add')
@@ -37,6 +44,11 @@ class Store:
             UNIQUE(session,origin,source));
           CREATE TABLE IF NOT EXISTS processed (session TEXT, event TEXT, PRIMARY KEY(session,event));
           CREATE TABLE IF NOT EXISTS cursors (session TEXT PRIMARY KEY, value TEXT);
+          CREATE TABLE IF NOT EXISTS item_creation (item INTEGER PRIMARY KEY, created_at REAL);
+          CREATE TRIGGER IF NOT EXISTS record_item_creation AFTER INSERT ON items
+            BEGIN INSERT INTO item_creation VALUES(NEW.id,(julianday('now')-2440587.5)*86400); END;
+          CREATE TRIGGER IF NOT EXISTS remove_item_creation AFTER DELETE ON items
+            BEGIN DELETE FROM item_creation WHERE item=OLD.id; END;
         ''')
 
         columns={r[1] for r in self.conn.execute('PRAGMA table_info(items)')}
@@ -49,7 +61,7 @@ class Store:
         self.conn.close()
 
     def items(self, origin=None):
-        sql="SELECT * FROM items WHERE session=? AND status='open'"
+        sql="SELECT items.*, (SELECT created_at FROM item_creation WHERE item=items.id) AS created_at FROM items WHERE session=? AND status='open'"
         args=[self.session]
         if origin:sql+=' AND origin=?';args.append(origin)
         return [dict(r) for r in self.conn.execute(sql+" ORDER BY CASE origin WHEN 'task' THEN 0 ELSE 1 END,id",args)]
@@ -111,7 +123,8 @@ class Store:
                         # Dedupe against all open origins; completed promises may be made anew.
                         if not any(i['text'].casefold()==text.casefold() for i in self.items()):
                             source=key+':'+hashlib.sha256(text.encode()).hexdigest()
-                            self.conn.execute('INSERT OR IGNORE INTO items(session,origin,source,text) VALUES(?,?,?,?)',(self.session,'promise',source,text))
+                            row=self.conn.execute('INSERT OR IGNORE INTO items(session,origin,source,text) VALUES(?,?,?,?)',(self.session,'promise',source,text))
+                            if row.rowcount:self.conn.execute('UPDATE item_creation SET created_at=? WHERE item=?',(event.get('created_at'),row.lastrowid))
                 elif kind in ('snapshot','upsert'):
                     tasks=event['tasks']
                     if kind=='snapshot':
@@ -126,7 +139,8 @@ class Store:
                             self.conn.execute('UPDATE items SET text=?,status=?,selected=CASE WHEN ?="done" THEN 0 ELSE selected END WHERE id=?',
                                 (clean(task.get('text') or old['text']), 'done' if old['dismissed'] else status,status,old['id']))
                         elif task.get('text'):
-                            self.conn.execute('INSERT INTO items(session,origin,source,text,status) VALUES(?,?,?,?,?)',(self.session,'task',task['source'],clean(task['text']),status))
+                            row=self.conn.execute('INSERT INTO items(session,origin,source,text,status) VALUES(?,?,?,?,?)',(self.session,'task',task['source'],clean(task['text']),status))
+                            self.conn.execute('UPDATE item_creation SET created_at=? WHERE item=?',(event.get('created_at'),row.lastrowid))
                 self.conn.execute('INSERT OR IGNORE INTO processed VALUES(?,?)',(self.session,key))
             self.conn.execute('INSERT OR REPLACE INTO cursors VALUES(?,?)',(self.session,json.dumps(state)))
 
@@ -218,6 +232,7 @@ class Collector:
                 key=hashlib.sha256(line).hexdigest()
                 events=self.adapter.feed(row,new,key);audits={}
                 for event in events:
+                    event['created_at']=source_timestamp(row.get('timestamp'))
                     if event['kind']=='audit' and not self.store.seen(event['id']):
                         if self.audit_handler:
                             self.audit_handler(event['reply'],new.get('request',''),event['id'],row.get('timestamp'))

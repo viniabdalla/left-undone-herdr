@@ -95,10 +95,13 @@ class RepositoryTests(unittest.TestCase):
             app.main()
         return opened,api,output.getvalue()
 
-    def test_no_arguments_opens_only_session_of_cwd(self):
+    def test_no_arguments_always_offer_global_choice(self):
         a=self.binding();other=self.binding('s2',cwd=self.other)
-        with patch('pathlib.Path.cwd',return_value=self.sub):opened,api,_=self.run_cli([],[a,other])
-        opened.assert_called_once_with(a);api.assert_not_called()
+        for bindings in ([a,other],[a]):
+            with self.subTest(count=len(bindings)), patch('pathlib.Path.cwd',return_value=self.sub), patch.dict(os.environ,{'LEFT_UNDONE_REPO':str(self.repo)}), patch('left_undone.app.curses.wrapper') as wrapper:
+                opened,api,_=self.run_cli([],bindings,tty=True)
+                opened.assert_not_called();api.assert_not_called()
+                self.assertEqual(wrapper.call_args.args[1],bindings)
 
     def test_noninteractive_picker_uses_split_and_carries_absolute_repo(self):
         a=self.binding();b=self.binding('s2','claude')

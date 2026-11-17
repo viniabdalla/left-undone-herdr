@@ -68,6 +68,7 @@ def open_panel(binding,project=None):
                 same=previous==asdict(binding) and old.get('project')==project
                 starting=time.time()-old.get('created',0)<15
                 if same and (starting or panel_process_alive(old['pane'],file)):
+                    herdr('plugin','pane','focus',old['pane'])
                     return {'reused':True,'pane':old['pane']}
                 herdr('plugin','pane','close',old['pane'])
                 wait_collector(root,binding.key)
@@ -118,7 +119,7 @@ def main():
     os.umask(0o077)
     parser=argparse.ArgumentParser(description='Left Undone para Herdr')
     parser.add_argument('command',nargs='?',choices=['list','open','pick','panel','collect','export','import','items','recover','changes'],
-                        help='Sem comando: abre as pendências do repo atual')
+                        help='Sem comando: escolhe uma conversa do Herdr')
     parser.add_argument('--pane');parser.add_argument('--session');parser.add_argument('--binding',default=os.environ.get('LEFT_UNDONE_BINDING'))
     parser.add_argument('--file',type=Path)
     parser.add_argument('--marker',help='Marca fresca publicada em commentary para recuperar a identidade Codex')
@@ -130,7 +131,6 @@ def main():
     if args.project is not None and not args.project.expanduser().is_dir():parser.error('Pasta do projeto não existe')
     if args.command is None:
         args.command='open'
-        if not args.pane and not args.session and args.repo is None:args.repo=Path.cwd()
     if args.repo is not None and (args.command not in ('list','open','pick') or args.pane or args.session):
         parser.error('--repo é usado com list/open/pick, sem --pane/--session')
     if args.command=='pick' and args.repo is None and os.environ.get('LEFT_UNDONE_REPO'):

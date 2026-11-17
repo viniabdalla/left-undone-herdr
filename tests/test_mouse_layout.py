@@ -41,7 +41,7 @@ class LayoutTests(unittest.TestCase):
 
     def test_very_long_item_continues_across_pages_without_losing_words(self):
         words=['word'+str(i) for i in range(100)]
-        items=[item(1,' '.join(words)),item(2,'last item')]
+        items=[{**item(1,' '.join(words)),'created_at':200},{**item(2,'last item'),'created_at':100}]
         first=panel_layout(items,24,18,0,'','','')
         self.assertGreater(first.pages,1)
         texts=[]

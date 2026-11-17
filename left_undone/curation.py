@@ -306,6 +306,7 @@ class Curator:
                 origin = 'task' if scope == 'project' else 'promise'
                 source = 'curator:' + hashlib.sha256((str(event) + '\0' + text.casefold()).encode()).hexdigest()
                 row = self.conn.execute('INSERT INTO items(session,origin,source,text) VALUES(?,?,?,?)', (owner, origin, source, text))
+                self.conn.execute('UPDATE item_creation SET created_at=? WHERE item=?',(stamp,row.lastrowid))
                 if stamp is not None:self.conn.execute('UPDATE curation_item_time SET created=? WHERE item=?',(stamp,row.lastrowid))
                 known.add(text.casefold());log('add', row.lastrowid, '', text)
             if event:self.conn.execute('INSERT OR IGNORE INTO processed VALUES(?,?)', (self.store.session, event))
