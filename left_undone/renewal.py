@@ -1,4 +1,4 @@
-"""Hand off a Codex conversation to a verified successor in a new split."""
+"""Hand off a Codex conversation to a verified successor in a new tab."""
 import fcntl
 import json
 import os
@@ -19,6 +19,10 @@ from .language import tr
 from .projects import project_store
 from .repository import project_root, session_project
 from .runtime import Binding
+
+
+class ConfirmationRequired(RuntimeError):
+    pass
 
 
 def receipt(history, offset, marker):
@@ -125,6 +129,30 @@ def journal(root, binding):
     return root/(binding.key+'.renewal.json')
 
 
+def pending_confirmation(root, binding, store, cancel=None):
+    path = journal(root,binding)
+    if not path.exists():
+        return None
+    with (root/(binding.key+'.renewal.lock')).open('a') as lock:
+        try:
+            fcntl.flock(lock,fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return None
+        if not path.exists():
+            return None
+        job = json.loads(path.read_text())
+        if job.get('stage') != 'confirm':
+            return None
+        if cancel == job['approval']:
+            path.unlink()
+            return None
+        selection = [[i['id'],i['text']] for i in store.items()]
+        if selection != job['selection']:
+            job.update(selection=selection,approval=secrets.token_hex(12))
+            atomic_json(path,job)
+        return job
+
+
 def confirmed_successor(root, binding, pane, live=None):
     """Follow the verified successor while the monitor stays in its own pane."""
     current = binding
@@ -170,10 +198,14 @@ def active_source(binding, project):
 
 
 def allocated_pane(binding, job):
-    """Recover a split even if the coordinator stopped before saving its ID."""
+    """Recover the successor pane even if the coordinator stopped before saving its ID."""
     matches = []
     for pane in runtime.herdr('pane','list','--workspace',binding.workspace)['panes']:
-        if pane['tab_id'] != job['tab'] or pane['pane_id'] == binding.pane:
+        if pane['pane_id'] == binding.pane:
+            continue
+        if 'source_tab' in job and pane['tab_id'] == job['source_tab']:
+            continue
+        if job.get('tab') and pane['tab_id'] != job['tab']:
             continue
         info = runtime.herdr('pane','process-info','--pane',pane['pane_id'])['process_info']
         try:
@@ -183,7 +215,7 @@ def allocated_pane(binding, job):
         if env.get('LEFT_UNDONE_HANDOFF') == job['token']:
             matches.append(pane)
     if len(matches) != 1:
-        raise RuntimeError('Could not identify the new split. Check the panes before retrying.')
+        raise RuntimeError('Could not identify the successor pane. Check the panes before retrying.')
     return matches[0]
 
 
@@ -194,7 +226,7 @@ def split_binding(binding, job):
             if new.session in (binding.session,job['source']['session']):
                 raise RuntimeError('Expected a fresh Codex session')
             if runtime.process_environment(new.pid).get('LEFT_UNDONE_HANDOFF') != job['token']:
-                raise RuntimeError('Unexpected process in the handoff split')
+                raise RuntimeError('Unexpected process in the handoff pane')
             if session_project(new) != Path(job['project']):
                 raise RuntimeError('Successor worktree differs from source')
             if runtime.verify(new).get('agent_status') in ('idle','done'):
@@ -221,11 +253,11 @@ def run(root, binding, confirm_source=None):
                 if Path(store.project) != project:
                     raise ValueError('The linked project differs from the active worktree')
                 selection = [[i['id'],i['text']] for i in store.items()]
-                if source.session != binding.session and (
+                if (
                         not confirm_source or confirm_source != job.get('approval')
                         or source.session != job.get('active') or selection != job.get('selection')):
                     save('confirm',active=source.session,selection=selection,approval=secrets.token_hex(12))
-                    raise RuntimeError(tr('Different session. H again: take {0} tasks?').format(len(selection)))
+                    raise ConfirmationRequired(f'Confirm handoff of {len(selection)} tasks')
                 _, ids = export_snapshot(store,project)
             token = secrets.token_hex(12)
             identified(source,project,source.session)
@@ -237,7 +269,7 @@ Review the worktree and branch; commit and push only if appropriate and authoriz
 Save the handoff following this project's local handoff procedure. If anything required fails, stop and explain.
 Only after success, include a separate plain-text line in your FINAL response reading
 READY-{token} followed by a space and the actual saved handoff ID, path or concise handoff text.
-Keep this pane open. Left Undone will launch the successor in a split.""")
+Keep this pane open. Left Undone will launch the successor in a new Herdr tab.""")
         project = job['project']
         if job['stage'] == 'preparing':
             source = Binding(**job.get('source',asdict(binding)))
@@ -245,14 +277,14 @@ Keep this pane open. Left Undone will launch the successor in a split.""")
                        300,'Handoff not confirmed. Check the conversation, then press H to continue.')
             live = wait(lambda: ready_terminal(source,project),30,'Wait for Codex')
             identified(source,project,source.session)
-            save('allocating',ref=ref,source=asdict(source),tab=live['tab_id'])
-            pane = runtime.herdr('pane','split','--pane',source.pane,'--direction','down',
+            save('allocating',ref=ref,source=asdict(source),source_tab=live['tab_id'])
+            pane = runtime.herdr('tab','create','--workspace',source.workspace,'--label','Handoff · Codex',
                                  '--cwd',project,'--env','LEFT_UNDONE_HANDOFF='+job['token'],
-                                 '--env','CODEX_HOME='+source.account,'--no-focus')['pane']
-            save('launch',pane=pane['pane_id'],terminal=pane['terminal_id'])
+                                 '--env','CODEX_HOME='+source.account,'--no-focus')['root_pane']
+            save('launch',pane=pane['pane_id'],terminal=pane['terminal_id'],tab=pane['tab_id'])
         if job['stage'] == 'allocating':
             pane = allocated_pane(binding,job)
-            save('launch',pane=pane['pane_id'],terminal=pane['terminal_id'])
+            save('launch',pane=pane['pane_id'],terminal=pane['terminal_id'],tab=pane['tab_id'])
         if job['stage'] == 'launch':
             pane = allocated_pane(binding,job)
             if (pane['pane_id'],pane['terminal_id']) != (job['pane'],job['terminal']) or pane.get('agent'):
@@ -263,7 +295,7 @@ Keep this pane open. Left Undone will launch the successor in a split.""")
             subprocess.run([os.environ.get('HERDR_BIN_PATH','herdr'),'pane','run',job['pane'],command],
                            check=True,capture_output=True,text=True,timeout=20)
         if job['stage'] == 'starting':
-            new = wait(lambda: split_binding(binding,job),180,'Check Codex startup in the successor split, then press H.')
+            new = wait(lambda: split_binding(binding,job),180,'Check Codex startup in the successor pane, then press H.')
             identified(new,project,new.session)
             save('initializing',successor=new.session,binding=asdict(new))
             runtime.send(new,'/init')

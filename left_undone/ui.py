@@ -15,7 +15,7 @@ from .exchange import export_project, import_choices, import_selected
 from .runtime import send, send_selected, queue, queue_selected, QueueOffer
 from .projects import project_store
 from .ui_layout import (MouseInput, import_layout, panel_layout, picker_layout, terminal_text,
-                        queue_confirmation_layout, done_confirmation_layout, readable_panel_layout, project_label)
+                        confirmation_layout, queue_confirmation_layout, done_confirmation_layout, readable_panel_layout, project_label)
 from .collection_request import request_collection
 
 
@@ -203,7 +203,9 @@ def panel(win,binding,root,binding_file):
     review_worker = None
     review_errors = None
     renewal_worker = None
-    confirmation = None
+    from .renewal import journal, pending_confirmation
+    state = journal(root,binding)
+    confirmation = pending_confirmation(root,binding,db)
     renewal_errors = None
     checked_tabs = 0
     history=False;projects=None;project_cursor=0
@@ -233,11 +235,9 @@ def panel(win,binding,root,binding_file):
                     last_dispatch = snapshot
                 status = tr(dispatch.STATES[latest['state']])+' · '+(latest['summary'] or latest['tab'] or latest['task'])
             if renewal_worker is not None:
-                from .renewal import journal
                 result = renewal_worker.poll()
                 if result is None:
                     notice = tr('Preparing handoff…')
-                    state = journal(root,binding)
                     if state.exists():
                         stage = json.loads(state.read_text())['stage']
                         notice = tr({'preparing':'Preparing handoff…','switching':'Opening new conversation…',
@@ -248,15 +248,32 @@ def panel(win,binding,root,binding_file):
                     notice = renewal_errors.read().strip() or tr('Handoff finished')
                     renewal_errors.close()
                     renewal_errors = renewal_worker = None
-                    state = journal(root,binding)
                     job = json.loads(state.read_text()) if state.exists() else {}
-                    if job.get('stage') == 'confirm' and tr('Different session. H again: take {0} tasks?').format(len(job['selection'])) in notice:
-                        confirmation = job['approval']
-                        notice = tr('Different session. H again: take {0} tasks?').format(len(job['selection']))
+                    if result == 3 and job.get('stage') == 'confirm':
+                        confirmation = job
+                        from .runtime import herdr
+                        pane = os.environ.get('HERDR_PANE_ID')
+                        if pane:
+                            try:
+                                if herdr('pane','layout','--pane',pane)['layout']['focused_pane_id'] == binding.pane:
+                                    herdr('plugin','pane','focus',pane)
+                            except RuntimeError:
+                                pass
                     if result == 0:
                         from .runtime import Binding
                         return Binding(**json.loads(journal(root,binding).read_text())['binding'])
-            if pending:
+            if confirmation:
+                question = (tr('Codex is in another conversation. Carry these tasks into a new tab?')
+                            if confirmation['active'] != binding.session else
+                            tr('Prepare the handoff and open Codex in a new tab?'))
+                layout=confirmation_layout(w,h,len(confirmation['selection']),tr('CONFIRM HANDOFF'),
+                                           question,tr('[H Confirm handoff]'))
+            elif renewal_worker is not None:
+                layout=Layout(w,h)
+                layout.add(0,0,tr('HANDOFF'),'title')
+                for y,line in enumerate(wrap_text(notice,max(1,w-1)),2):
+                    layout.add(y,0,line)
+            elif pending:
                 build=done_confirmation_layout if isinstance(pending,DoneOffer) else queue_confirmation_layout
                 layout=build(w,h,len(pending.items))
             elif projects is not None:
@@ -276,8 +293,18 @@ def panel(win,binding,root,binding_file):
             if projects is not None and key in ('\n','\r'):action=('open',None)
             else:action=input_action(key,mouse,layout)
             if not action:continue
-            if action != ('key','H'):
-                confirmation = None
+            approval = None
+            if confirmation:
+                if action in (('close',None),('key','2')):
+                    confirmation = pending_confirmation(root,binding,db,cancel=confirmation['approval'])
+                    notice=''
+                    continue
+                if (action[0]!='key' or action[1] not in ('1','h','H','\r','\n') or
+                        not any(target.action==('key','1') for target in layout.targets)):
+                    continue
+                approval=confirmation['approval']
+                confirmation=None
+                action=('key','H')
             if renewal_worker is not None and action[0]!='close':continue
             if action == ('key', '9') and not pending:
                 try:
@@ -345,7 +372,7 @@ def panel(win,binding,root,binding_file):
                     renewal_errors = TemporaryFile(mode='w+',encoding='utf-8')
                     renewal_worker = subprocess.Popen([sys.executable,str(Path(__file__).resolve().parents[1]/'left-undone'),
                                                        'renew','--binding',str(binding_file),
-                                                       *(['--confirm-source',confirmation] if confirmation else [])],
+                                                       *(['--confirm-source',approval] if approval else [])],
                                                       stderr=renewal_errors,stdout=subprocess.DEVNULL)
                 elif action==('key','P'):
                     dispatch.request(db,binding,root,plan=True);notice=''

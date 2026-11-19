@@ -208,8 +208,13 @@ def main():
         if not args.binding:raise RuntimeError(tr('Provide --binding with the file created when the panel opened'))
         binding=Binding(**json.loads(Path(args.binding).read_text()))
         if args.command=='renew':
-            from .renewal import run
-            run(root,binding,args.confirm_source);return
+            from .renewal import ConfirmationRequired, run
+            try:
+                run(root,binding,args.confirm_source)
+            except ConfirmationRequired as error:
+                print(error,file=sys.stderr)
+                sys.exit(3)
+            return
         if args.command=='panel':
             def stop_panel(*_):raise KeyboardInterrupt
             signal.signal(signal.SIGTERM,stop_panel)

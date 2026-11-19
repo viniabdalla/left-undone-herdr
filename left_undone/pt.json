@@ -1,4 +1,9 @@
 {
+  "CONFIRM HANDOFF": "CONFIRMAR HANDOFF",
+  "HANDOFF": "HANDOFF",
+  "[H Confirm handoff]": "[H Confirmar handoff]",
+  "Codex is in another conversation. Carry these tasks into a new tab?": "O Codex está em outra conversa. Levar estas tarefas para uma nova aba?",
+  "Prepare the handoff and open Codex in a new tab?": "Preparar o handoff e abrir o Codex em uma nova aba?",
   "Connected. You can close the old pane {0}.": "Conectado. Pode fechar o pane antigo {0}.",
   "Different session. H again: take {0} tasks?": "Outra conversa. H de novo: levar {0} tarefas?",
   "Panel linked to a different conversation.": "Painel vinculado a outra conversa.",

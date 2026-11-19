@@ -31,6 +31,34 @@ class Window:
     def get_wch(self):return next(self.keys)
 
 class ReadableUITests(unittest.TestCase):
+    def test_handoff_confirmation_survives_reload_and_enter_or_cancel(self):
+        from left_undone.renewal import journal
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            binding=Binding('codex','old',folder,'pane','term','ws','log',1,'1')
+            store=ProjectStore(root/'state.db',binding.key,folder)
+            self.addCleanup(store.close)
+            store.add('task','Carry this task')
+            for key in ('\n','h','\x1b'):
+                path=journal(root,binding)
+                path.write_text(json.dumps(dict(stage='confirm',active='new',selection=[],approval='stale')))
+                window=Window(['a',key,'\x1b'])
+                worker=Mock()
+                worker.poll.return_value=None
+                with patch.object(ui.subprocess,'Popen',return_value=worker) as launch:
+                    ui.panel(window,binding,root,root/'binding.json')
+                self.assertIn('[H Confirm handoff]',window.frames[0])
+                self.assertIn('new tab?',window.frames[0])
+                self.assertIn('1 item',window.frames[1])
+                if key=='\x1b':
+                    self.assertFalse(path.exists())
+                    self.assertEqual(launch.call_count,1)
+                else:
+                    approval=json.loads(path.read_text())['approval']
+                    self.assertNotEqual(approval,'stale')
+                    self.assertEqual(launch.call_args.args[0][-2:],['--confirm-source',approval])
+
     def test_history_and_project_navigation_preserve_binding_and_scoped_selection(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);binding=Binding('codex','test',folder,'w0:p0','none','w0','none',1,'1')
