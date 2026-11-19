@@ -27,7 +27,9 @@ atualizado: 2026-11-19
 - [ ] Track the visible Codex conversation and correct a stale UUID after `/new` or `/resume` before the first reply. Repeat the live switch and resume checks that exposed this failure.
 - [ ] Exclude Claude's automatic compaction summaries (`isCompactSummary`) from user requests during curation. Check `isMeta` and Codex system messages as well.
 - [ ] Run a real dispatch of 2 tasks (Separate and Together) in a disposable conversation and check tabs, reports and completion.
-- [ ] Run H live in a disposable Claude conversation and in a disposable Codex one; check /init detection, restore and task import.
+- [ ] Codex approval prompts (activity log, MCP calls) stall the handoff until someone approves; the 300 s waits can expire. Decide how to surface this in the panel.
+- [ ] ai-memory session routing filed a Codex test handoff under the wrong project (`tropico-agentes`). Investigate in ai-memory.
+- [ ] A Codex started as plain `codex` (daemon) is not identified by Herdr; only marker recovery works. Handoff successors use `--no-daemon`. Decide whether the panel should explain this.
 - [ ] Apply the plug-and-play prompt idea (short prompt, skill named only if installed) to the other buttons that prompt the agent.
 - [ ] Watch real use of the new picker and `open --current` from Codex (app-server tools may not descend from the TUI process; fallback is `CODEX_THREAD_ID`).
 
@@ -37,6 +39,8 @@ atualizado: 2026-11-19
 
 ## Done
 
+- [x] 2026-11-19 Dispatch workers on the default Claude account now start without `CLAUDE_CONFIG_DIR`, like handoff successors (shared `runtime.account_variable`).
+- [x] 2026-11-19 Ran H live with Claude and Codex in disposable sandboxes (`~/Projects/lu-handoff-sandbox*`): every stage passed, and Claude /init detection waits for the reply end. Fixed default Claude account launch without `CLAUDE_CONFIG_DIR`, the successor transcript race, and the wrapped `/status` UUID in narrow panes.
 - [x] 2026-11-19 Dispatch request prompt now gives ready-to-run commands, valid model/effort values per CLI (weakest for execution, strongest for planning), a brief checklist and a Herdr/Left Undone command reference.
 - [x] 2026-11-19 Handoff (H) is universal for Codex and Claude: one short plug-and-play prompt that names an installed handoff skill only when found. Unit-tested; live run pending.
 - [x] 2026-11-19 Agents monitor shows context used (e.g. 273k / 1M · 27%) with abbreviated totals; [B] sets the Claude context window (automatic by default). Agents button moved to the top row.
@@ -45,5 +49,3 @@ atualizado: 2026-11-19
 - [x] 2026-11-19 Opening a panel whose old copy sits in another tab now closes it and reopens beside the conversation. Verified live and with a regression test.
 - [x] 2026-11-18 Added a dedicated handoff confirmation screen and switched successor launch to a new Herdr tab. Verified the screen and disposable tab creation.
 - [x] 2026-11-16 Added project panels with highlighted titles, separate groups for the agent and the user, history, and unobtrusive dates.
-- [x] 2026-11-16 Made the short command open the global picker and focus an existing panel when reopened.
-- [x] 2026-11-16 Added creation dates and newest-first or oldest-first sorting while preserving selections.

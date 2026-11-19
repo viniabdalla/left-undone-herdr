@@ -70,6 +70,24 @@ class ClaudeDispatchTests(DispatchFixture):
         self.check_worker_launch(['--effort', 'high', '--permission-mode', 'bypassPermissions'],
                                  'CLAUDE_CONFIG_DIR')
 
+    def test_default_claude_account_launches_without_config_dir(self):
+        # CLAUDE_CONFIG_DIR=~/.claude would switch Claude to ~/.claude/.claude.json.
+        from left_undone import runtime
+        home=Path(self.root)/'home';(home/'.claude').mkdir(parents=True)
+        with patch.object(runtime.Path,'home',return_value=home):
+            self.assertEqual(runtime.account_variable('claude',str(home/'.claude')),('CLAUDE_CONFIG_DIR',None))
+            self.assertEqual(runtime.account_variable('claude','/other'),('CLAUDE_CONFIG_DIR','/other'))
+            self.assertEqual(runtime.account_variable('codex',str(home/'.codex')),('CODEX_HOME',str(home/'.codex')))
+        pane = dict(workspace_id='w1',tab_id='tab',pane_id='pane',cwd=str(self.root),terminal_id='term2')
+        with patch.object(dispatch,'herdr',return_value={'tab':pane,'root_pane':pane}), patch.object(dispatch.subprocess,'run'):
+            dispatch.review(self.conn,self.root,self.args,'Check README')
+        with patch.object(dispatch,'herdr',return_value={'pane':pane}), patch.object(Path,'cwd',return_value=self.root), \
+             patch.dict(dispatch.os.environ,{'HERDR_PANE_ID':'pane','CLAUDE_CONFIG_DIR':'/stale'}), \
+             patch.object(dispatch,'account_variable',return_value=('CLAUDE_CONFIG_DIR',None)), \
+             patch.object(dispatch.subprocess,'run') as run:
+            dispatch.worker(self.conn,self.root,self.job['receipt'])
+        self.assertNotIn('CLAUDE_CONFIG_DIR',run.call_args.kwargs['env'])
+
 
 class DispatchTests(DispatchFixture):
     def test_codex_worker_launch(self):

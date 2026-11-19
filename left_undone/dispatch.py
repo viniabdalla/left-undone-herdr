@@ -15,7 +15,7 @@ from pathlib import Path
 from . import dispatch_plan
 from .language import tr
 from .repository import project_root
-from .runtime import Binding, herdr, send, verify
+from .runtime import Binding, account_variable, herdr, send, verify
 
 CLI = Path(__file__).resolve().parents[1] / 'left-undone'
 STATES = {'review': 'Reviewing task', 'question': 'Waiting for you', 'launch': 'Opening tab',
@@ -345,7 +345,11 @@ Only report done once the requested work is complete."""
     env = os.environ.copy()
     env.pop('CODEX_THREAD_ID', None)
     env.pop('CLAUDECODE', None)
-    env['CODEX_HOME' if binding.kind=='codex' else 'CLAUDE_CONFIG_DIR'] = binding.account
+    name, value = account_variable(binding.kind, binding.account)
+    if value is None:
+        env.pop(name, None)
+    else:
+        env[name] = value
     if job['plan']:
         def question_status(question):
             with conn:

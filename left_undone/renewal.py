@@ -78,16 +78,9 @@ def skill_hint(binding, project, word='handoff'):
 
 
 def account_env(kind, account):
-    """Herdr --env options and `env -u` names that keep the successor on the source account.
-
-    Claude reads ~/.claude.json only while CLAUDE_CONFIG_DIR is unset. Setting it to the
-    default ~/.claude switches to ~/.claude/.claude.json, with other folder trust and MCP
-    servers, so the default account launches with the variable removed instead."""
-    name = 'CODEX_HOME' if kind == 'codex' else 'CLAUDE_CONFIG_DIR'
-    default = Path.home()/('.codex' if kind == 'codex' else '.claude')
-    if kind == 'claude' and Path(account).resolve() == default.resolve():
-        return [], ['-u', name]
-    return ['--env', f'{name}={account}'], []
+    """Herdr --env options and `env -u` names that keep the successor on the source account."""
+    name, value = runtime.account_variable(kind, account)
+    return ([], ['-u', name]) if value is None else (['--env', f'{name}={value}'], [])
 
 
 def completed_init(history):
@@ -131,7 +124,21 @@ def claude_init_done(history):
 
 
 def status_session(screen):
-    matches = re.findall(r'^\s*Session:\s+([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})[ \t]*$', screen, re.M)
+    """The single session UUID shown by Codex /status, even when a narrow pane wraps it."""
+    matches = []
+    lines = screen.splitlines()
+    for index, line in enumerate(lines):
+        label = re.match(r'^[ \t]*Session:[ \t]*([a-f0-9-]*)[ \t]*$', line)
+        if not label:
+            continue
+        value = label[1]
+        # Narrow panes wrap the value onto indented lines holding only UUID characters.
+        for more in lines[index+1:index+6]:
+            if len(value) >= 36 or not re.fullmatch(r'[ \t]+[a-f0-9-]+[ \t]*', more):
+                break
+            value += more.strip()
+        if re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', value):
+            matches.append(value)
     return matches[-1] if len(set(matches)) == 1 else None
 
 
@@ -304,7 +311,12 @@ def split_binding(binding, job):
                 raise RuntimeError('Expected a fresh agent session')
             if runtime.process_environment(new.pid).get('LEFT_UNDONE_HANDOFF') != job['token']:
                 raise RuntimeError('Unexpected process in the handoff pane')
-            if session_project(new) != Path(job['project']):
+            # Herdr can announce the session before the agent writes the transcript
+            # rows that carry its cwd. Keep waiting until the worktree is known.
+            found = session_project(new)
+            if found is None:
+                continue
+            if found != Path(job['project']):
                 raise RuntimeError('Successor worktree differs from source')
             if runtime.verify(new).get('agent_status') in ('idle','done'):
                 return new

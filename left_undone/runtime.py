@@ -199,6 +199,18 @@ def verify(binding, ready=False):
     return live
 
 
+def account_variable(kind, account):
+    """The env variable that keeps a launched agent on this account, and its value.
+
+    Claude reads ~/.claude.json only while CLAUDE_CONFIG_DIR is unset. Setting it to the
+    default ~/.claude switches to ~/.claude/.claude.json, with other folder trust and MCP
+    servers, so the default Claude account returns None: remove the variable instead."""
+    name = 'CODEX_HOME' if kind == 'codex' else 'CLAUDE_CONFIG_DIR'
+    if kind == 'claude' and Path(account).resolve() == (Path.home()/'.claude').resolve():
+        return name, None
+    return name, account
+
+
 def send(binding,text):
     verify(binding,ready=True)
     # Herdr 0.9.1 has no compare-and-send session precondition. Never retry a send.

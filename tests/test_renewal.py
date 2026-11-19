@@ -17,6 +17,10 @@ class RenewalTests(unittest.TestCase):
         self.assertEqual(renewal.status_session(status), sid)
         self.assertIsNone(renewal.status_session('› Session: '+sid))
         self.assertIsNone(renewal.status_session(status+'\n'+status.replace(sid,'abcd'+sid[4:])))
+        # A 38-column pane wraps the UUID under the label.
+        narrow = '  Session:\n                       01a1f08a-b9ef-7\n                       1c2-977e-4d0b0c\n                       22aba6\n  Context window:      92% left'
+        self.assertEqual(renewal.status_session(narrow), sid)
+        self.assertIsNone(renewal.status_session('  Session:\n      01a1f08a-b9ef-7\n  Context window: x'))
 
     def test_only_a_completed_turn_can_release_the_switch(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -180,3 +184,24 @@ class UniversalHandoffTests(unittest.TestCase):
                 self.assertEqual(account_env('claude',other),(['--env','CLAUDE_CONFIG_DIR='+other],[]))
                 self.assertEqual(account_env('codex',str(home/'.codex')),
                                  (['--env','CODEX_HOME='+str(home/'.codex')],[]))
+
+    def test_successor_waits_until_its_transcript_records_the_worktree(self):
+        # Herdr announces the Claude session before the transcript file exists.
+        from left_undone.renewal import split_binding
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            history = root/'new.jsonl'
+            source = Binding('claude','old',str(root/'account'),'p1','t1','w','h',1,'1')
+            new = Binding('claude','new',str(root/'account'),'p2','t2','w',str(history),2,'2')
+            job = {'pane':'p2','terminal':'t2','token':'tok','project':str(root),'source':{'session':'old'}}
+            with patch('left_undone.runtime.candidates',return_value=([new],[])), \
+                 patch('left_undone.runtime.process_environment',return_value={'LEFT_UNDONE_HANDOFF':'tok'}), \
+                 patch('left_undone.runtime.verify',return_value={'agent_status':'idle'}):
+                self.assertIsNone(split_binding(source,job))
+                history.write_text(json.dumps({'type':'user','sessionId':'new','cwd':str(root)})+'\n')
+                with patch('left_undone.renewal.project_root',side_effect=lambda p:Path(p)), \
+                     patch('left_undone.repository.project_root',side_effect=lambda p:Path(p)):
+                    self.assertEqual(split_binding(source,job),new)
+                    history.write_text(json.dumps({'type':'user','sessionId':'new','cwd':'/elsewhere'})+'\n')
+                    with self.assertRaises(RuntimeError):
+                        split_binding(source,job)
