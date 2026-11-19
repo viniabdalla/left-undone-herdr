@@ -36,7 +36,7 @@ class OrderingTests(unittest.TestCase):
             layout=panel_layout(items,80,40,0,'','','')
             text='\n'.join(line.text for line in layout.lines)
             self.assertIn('10/11/2026 09:00',text)
-            self.assertEqual(text.count('data desconhecida'),2)
+            self.assertEqual(text.count('unknown date'),2)
         finally:
             if old is None:os.environ.pop('TZ',None)
             else:os.environ['TZ']=old

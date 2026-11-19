@@ -6,6 +6,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from .language import tr
 
 
 def clean(text):
@@ -21,12 +22,12 @@ def source_timestamp(value):
 
 def validate_audit(value, opened):
     if not isinstance(value, dict) or set(value) != {'done', 'add'}:
-        raise ValueError('Analisador: esperado JSON com done e add')
+        raise ValueError(tr('Analyzer: expected JSON with done and add'))
     done, add = value['done'], value['add']
     if not isinstance(done, list) or any(type(n) is not int or not 1 <= n <= len(opened) for n in done):
-        raise ValueError('Analisador: índice done inválido')
+        raise ValueError(tr('Analyzer: invalid done index'))
     if not isinstance(add, list) or len(add) > 5 or any(not isinstance(s, str) or not s.strip() or len(s) > 240 for s in add):
-        raise ValueError('Analisador: add inválido (máximo 5 textos de 240 caracteres)')
+        raise ValueError(tr('Analyzer: invalid add (maximum 5 240-character texts)'))
     return {'done': list(dict.fromkeys(done)), 'add': list(dict.fromkeys(clean(s) for s in add))}
 
 
@@ -164,6 +165,10 @@ class CodexAdapter:
         p=row.get('payload',{})
         if row.get('type')=='event_msg' and p.get('type')=='task_complete':
             reply=p.get('last_agent_message','')
+            # Transferring a checklist is not evidence that its items were delivered.
+            if re.search(r'^(?:READY-[0-9a-f]{24} [^\n]+|RESTORED-[0-9a-f]{24} OK)$', reply or '', re.M):
+                state.pop('request', None)
+                return []
             return [{'kind':'audit','id':'turn:'+str(p.get('turn_id') or fallback),'reply':reply}] if reply else []
         if row.get('type')!='response_item':return []
         if p.get('type')=='function_call':
@@ -204,7 +209,8 @@ class ClaudeAdapter:
 
 
 class Collector:
-    def __init__(self, store, path, kind, analyze, audit_handler=None):
+    def __init__(self, store, path, kind, analyze, audit_handler=None, *, session_id=None):
+        self.session_id = session_id
         self.store=store;self.path=Path(path);self.analyze=analyze
         self.audit_handler=audit_handler;self.kind=kind
         self.adapter=CodexAdapter() if kind=='codex' else ClaudeAdapter()
@@ -219,8 +225,12 @@ class Collector:
                 line=f.readline()
                 if not line or not line.endswith(b'\n'):break
                 try:row=json.loads(line)
-                except (ValueError,UnicodeError) as e:raise ValueError('Histórico contém linha JSON inválida; cursor preservado') from e
+                except (ValueError,UnicodeError) as e:raise ValueError(tr('History contains invalid JSON line; preserved cursor')) from e
                 new=copy.deepcopy(state);new['offset']=f.tell()
+                if self.kind == 'claude' and self.session_id and row.get('sessionId') not in (None, self.session_id):
+                    self.store.commit_line(new, [], {})
+                    state = new
+                    continue
                 # Only actual user messages; tool results and system/developer data
                 # never become task requests for the project curator.
                 message=row.get('payload',{}) if self.kind=='codex' else row.get('message',{})
@@ -235,12 +245,16 @@ class Collector:
                     event['created_at']=source_timestamp(row.get('timestamp'))
                     if event['kind']=='audit' and not self.store.seen(event['id']):
                         if self.audit_handler:
-                            self.audit_handler(event['reply'],new.get('request',''),event['id'],row.get('timestamp'))
+                            self.audit_handler(event['reply'],new.get('request',''),event['id'],row.get('timestamp'),
+                                               previous_reply=new.get('previous_reply', ''))
                             audits[event['id']]=([],{'done':[],'add':[]})
                         else:
                             opened=self.store.items('promise')
                             value=self.analyze(event['reply'],[i['text'] for i in opened])
                             audits[event['id']]=(opened,validate_audit(value,opened))
-                    if event['kind']=='audit':new.pop('request',None)
+                    if event['kind']=='audit':
+                        new.pop('request',None)
+                        if self.audit_handler:
+                            new['previous_reply'] = event['reply'][-4000:]
                 self.store.commit_line(new,events,audits)
                 state=new

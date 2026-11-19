@@ -34,11 +34,6 @@ SQLite rows. Keep session collectors and source IDs unchanged.
 
 Verification: `python3 -m unittest discover -s tests -v` and compileall.
 
-## Resultado
+## Result
 
-Etapas 1–3 implementadas e verificadas: 69 testes, revisão independente e dois
-painéis reais com tarefas compartilhadas/seleção independente. Correções da
-revisão têm regressões: associação explícita preservada, importação apesar de
-promessa privada igual e conclusão concorrente sem ressuscitar seleção.
-Recuperação de registro validada ao vivo; mudança automática de conversa segue
-pendente conforme prioridade combinada. Coletores continuam por sessão.
+Steps 1–3 passed verification with 69 tests, independent review and two live panels sharing tasks with independent selections. Regression tests cover explicit associations, imports matching private promises and concurrent completion without restoring selection. Record recovery passed live validation. Automatic conversation switching remains pending under the agreed priorities. Collectors remain per-session.

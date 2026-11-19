@@ -1,12 +1,13 @@
 """Coalesced requests to the existing session collector, without signals."""
 import time
+from .language import tr
 
 
 def request_collection(worker,path):
     if worker.poll() is not None:
-        raise RuntimeError('Coletor parou. Feche e reabra o painel.')
+        raise RuntimeError(tr('Collector stopped. Close and reopen the panel.'))
     path.touch(mode=0o600)
-    return 'Coleta solicitada. Aguarde o status do coletor.'
+    return tr('Collection requested. Waiting for the collector.')
 
 
 def wait_for_collection(path,seconds):

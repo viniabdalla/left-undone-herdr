@@ -1,22 +1,21 @@
-# Abertura por repositório
+# Open by repository
 
-Comportamento aprovado pelo usuário em 2026-11-10: comando curto `left-undone`
-na pasta do repo abre a única sessão ativa, ou seleciona entre várias do repo.
-Reutiliza o painel existente. Sessões encerradas conservam dados, mas precisam
-ser retomadas para abrir um painel vinculado. Não agrega listas entre sessões.
+On 2026-11-10 the user approved running `left-undone` in a repository to open its only active session or choose among several. Reuse an existing panel. Closed sessions retain data and must resume before opening a linked panel. Each session keeps its own list.
 
-## Abordagens
-- Escolhida: filtrar sessões por repo, preservando identidade e listas individuais.
-- Alternativa: painel agregado por repo; exigiria indicar e rotear a origem de cada tarefa.
+## Approaches
 
-## Implementação
-Python stdlib; sem dependências. Sem argumentos equivale a `open --repo .`.
-`open` explícito preserva o seletor global; `--pane` + `--session` preservam abertura exata.
-Raiz Git física identifica o checkout (worktrees separados); sem Git usa pasta exata.
-O cwd vem do histórico com UUID correspondente; nunca serve como autorização de envio.
-Correção aprovada durante implementação: opções no próprio terminal, nunca popup.
-Com TTY, curses roda no terminal chamador; sem TTY, abre seletor em split Herdr.
-Split recebe caminho absoluto por variável própria, pois seu cwd pode ser o do plugin.
-Seletor mostra agente, pane, UUID, conta e contagem de itens abertos.
-Instalador cria link em ~/.local/bin/left-undone, recusando conflito com outro executável.
-Listas, coleta, validação de identidade e ações de mouse/teclado permanecem iguais.
+- Filter sessions by repository to preserve identity and individual lists. This was the chosen approach.
+- An aggregated repository panel would require identifying and routing each task to its source.
+
+## Implementation
+
+Use the Python standard library with no dependencies. With no arguments, the command is equivalent to `open --repo .`.
+Explicit `open` keeps the global picker. `--pane` with `--session` opens an exact binding.
+The physical Git root identifies the checkout, keeping worktrees separate. Outside Git use the exact directory.
+Read the working directory from history with a matching UUID. A directory cannot authorize delivery.
+During implementation the user requested choices directly in the terminal without a popup.
+With a TTY, run curses in the calling terminal. Otherwise open the picker in a Herdr split.
+Pass an absolute path to the split in a dedicated variable because the split may start in the plugin directory.
+The picker shows agent, pane, UUID, account and open-item count.
+The installer links ~/.local/bin/left-undone and refuses a conflict with another executable.
+Lists, collection, identity validation and mouse/keyboard actions keep their existing behavior.

@@ -12,8 +12,8 @@ def uninstall():
     for path, source in links().items():
         if owned_link(path, source):
             path.unlink()
-            print(f"Removido {path}")
-    print("Desinstalação concluída. As pendências e o checkout foram preservados.")
+            print(f"Removed {path}")
+    print("Uninstalled. Your tasks and checkout have been preserved.")
 
 
 if __name__ == "__main__":

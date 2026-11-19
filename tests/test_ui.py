@@ -5,25 +5,21 @@ from left_undone.core import Store
 from left_undone.ui import page_items, handle_key, DoneOffer, confirm_done
 
 class UITests(unittest.TestCase):
-    def test_selection_send_done_export_import_and_paging(self):
+    def test_selection_send_done_and_paging(self):
         with tempfile.TemporaryDirectory() as tmp:
             db=Store(Path(tmp)/'state.db','s');self.addCleanup(db.close)
             for n in range(30):db.add('promise',f'Task {n}')
             self.assertEqual(len(page_items(db.items(),0,10)),10)
             self.assertEqual(page_items(db.items(),2,10)[0]['text'],'Task 20')
-            sent=[];export=Path(tmp)/'latest.md'
+            sent=[]
             visible=page_items(db.items(),0,10)
-            handle_key('a',db,visible,sent.append,export)
+            handle_key('a',db,visible,sent.append)
             self.assertEqual(db.items()[0]['selected'],1)
-            handle_key('1',db,visible,sent.append,export)
+            handle_key('1',db,visible,sent.append)
             self.assertEqual(len(sent),1);self.assertEqual(len(db.items()),30)
-            handle_key('b',db,visible,sent.append,export)
-            with self.assertRaises(DoneOffer) as offer:handle_key('2',db,visible,sent.append,export)
+            handle_key('b',db,visible,sent.append)
+            with self.assertRaises(DoneOffer) as offer:handle_key('2',db,visible,sent.append)
             confirm_done(db,offer.exception)
-            self.assertEqual(len(db.items()),29)
-            handle_key('3',db,visible,sent.append,export)
-            self.assertTrue(export.read_text().startswith('# Left undone'))
-            handle_key('4',db,visible,sent.append,export)
             self.assertEqual(len(db.items()),29)
 
     def test_external_signal_stops_collector(self):
@@ -45,7 +41,7 @@ class UITests(unittest.TestCase):
                 self.assertIsNotNone(worker)
                 time.sleep(.2)
                 p.terminate();p.wait(timeout=10)
-                self.assertFalse(Path(f'/proc/{worker}').exists(),'coletor sobreviveu à UI')
+                self.assertFalse(Path(f'/proc/{worker}').exists(),'collector still running after the panel closed')
             finally:
                 if p.poll() is None:p.kill();p.wait()
                 if worker and Path(f'/proc/{worker}').exists():

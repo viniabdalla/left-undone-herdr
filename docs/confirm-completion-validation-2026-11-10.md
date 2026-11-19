@@ -1,28 +1,14 @@
-# Confirmação de conclusão manual — 2026-11-10
+# Manual completion confirmation — 2026-11-10
 
-Resultado: implementada para o botão Concluir e a tecla 2.
+Implemented for the Complete button and key 2.
 
-- Abrir a pergunta não conclui tarefas. Mostra quantidade e pergunta adequada
-  para um ou vários itens. 1/Confirmar aplica a conclusão; 2/Cancelar ou Esc
-  volta à lista preservando seleção e página, sem fechar o painel.
-- IDs/textos são congelados ao abrir e revalidados sob transação ao confirmar.
-  Mudança de texto, seleção ou estado invalida o pedido inteiro. Seleções novas
-  não são incluídas numa confirmação antiga. Projeto compartilhado usa a
-  seleção do usuário/painel correto e propaga a conclusão aos demais painéis.
-- Reutilizado o layout modal da fila. Pergunta invisível por tamanho reduzido
-  não aceita confirmação; apenas cancelar. Fluxo da fila preservado.
-- Sem mudanças nas regras ou chamadas de conclusão automática pela curadoria.
+- Opening the prompt leaves tasks open and shows the selected count with singular or plural wording. Key 1 or Confirm applies completion. Key 2, Cancel or Esc returns to the list on the same page with the selection intact.
+- Opening freezes the IDs and text. Confirmation revalidates them inside a transaction. Any change in text, selection or state invalidates the entire request. New selections cannot enter an old confirmation. Shared projects use the correct viewer's selection and propagate completion to other panels.
+- The queue modal layout is reused. When the window is too small to display the question, only cancellation is available. Queue behavior is preserved.
+- Automatic curation keeps its completion rules and calls.
 
-Validação: 114 testes passaram, incluindo curses real em PTY com clique/teclado,
-cancelamento por botão/2/Esc, preservação da página, um e vários itens,
-redimensionamento pequeno e confirmação explícita antes da mutação no SQLite.
-Os testes de curadoria existentes continuam passando. `compileall` e
-`git diff --check` sem erros.
+114 tests passed. Real curses in a PTY covered clicks and keys, cancellation by button/2/Esc, page preservation, single and multiple items, resizing to a small window and explicit confirmation before SQLite mutation. Existing curation tests, `compileall` and `git diff --check` passed.
 
-Revisão independente sem achados funcionais. Um teste de seleção por letras
-na página 2 assumia que as letras não mudariam quando os botões surgissem;
-o reflow existente muda esse mapeamento. O teste passou a clicar em IDs
-estáveis após o redesenho, sem alterar a paginação do produto.
+Independent review found no functional issues. A test using letters on page 2 assumed that letters stayed fixed when buttons appeared. The existing layout reflows and remaps them. The test now clicks stable IDs after redraw, preserving product pagination.
 
-Prévia rasterizada conferida em 40×24 (3 itens) e 18×12 (1 item):
-`docs/evidence/confirm-completion/confirmation.png`, local e ignorada pelo Git.
+The rasterized preview was checked at 40×24 with three items and 18×12 with one item. The local Git-ignored file is `docs/evidence/confirm-completion/confirmation.png`.

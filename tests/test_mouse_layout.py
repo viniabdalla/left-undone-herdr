@@ -8,16 +8,24 @@ def item(i,text,selected=0):
 
 class LayoutTests(unittest.TestCase):
     def test_picker_shows_panel_title_above_clickable_details(self):
-        rows=[{'id':0,'heading':'w5:p1 · Continue desenvolvendo o Git',
-               'text':'codex · 01a1c583-45f · conta .codex · 10 pendências'}]
+        rows=[{'id':0,'heading':'w5:p1 · Continue developing Git support',
+               'text':'codex · 01a1c583-45f · account .codex · 10 open tasks'}]
         for width in (25,80):
             with self.subTest(width=width):
                 layout=picker_layout(rows,width,25,0,0)
                 lines=[line for line in layout.lines if line.action==('choose',0)]
                 self.assertTrue(lines[0].text.startswith('> w5:p1 · Continue'))
                 self.assertTrue(lines[1].text.startswith('  codex · 01a1c583-45f'))
-                self.assertIn('10 pendências',' '.join(line.text.strip() for line in lines))
+                self.assertIn('10 open tasks',' '.join(line.text.strip() for line in lines))
                 self.assertEqual(layout.hit(3,lines[1].y),('choose',0))
+
+    def test_language_switch_has_clickable_target_in_picker_and_panel(self):
+        for width in (24,80):
+            for layout in (picker_layout([],width,30,0,0),panel_layout([],width,30,0,'','','')):
+                with self.subTest(width=width,screen=layout.lines[0].text):
+                    switch=next(line for line in layout.lines if line.text=='[9 Português]')
+                    self.assertEqual(layout.hit(switch.x,switch.y),('key','9'))
+                    self.assertEqual(layout.hit(switch.x+cell_width(switch.text)-1,switch.y),('key','9'))
 
     def test_collect_button_is_clickable_without_selection_and_in_narrow_panel(self):
         for width,height in ((18,13),(40,30),(80,24)):
@@ -29,12 +37,12 @@ class LayoutTests(unittest.TestCase):
                 self.assertIn(1,[i['id'] for i in layout.visible])
 
     def test_narrow_panel_wraps_complete_task_and_hit_target_covers_each_line(self):
-        text='Uma tarefa longa com palavras suficientes para quebrar em várias linhas sem cortar o final.'
-        layout=panel_layout([item(1,text)],27,40,0,'codex','Coleta ativa','')
+        text='A long task with enough words to wrap across several lines without losing the ending.'
+        layout=panel_layout([item(1,text)],27,40,0,'codex','Collection active','')
         rows=[line for line in layout.lines if line.action==('item',1)]
         self.assertGreater(len(rows),2)
         rendered=' '.join(line.text[6:] for line in rows)
-        self.assertIn('cortar o final.',rendered)
+        self.assertIn('losing the ending.',rendered)
         for line in layout.lines:self.assertLessEqual(line.x+cell_width(line.text),26)
         for line in rows:self.assertEqual(layout.hit(8,line.y),('item',1))
         self.assertIsNone(layout.hit(27,rows[0].y))
@@ -144,7 +152,7 @@ class MouseTests(unittest.TestCase):
         self.assertEqual(self.event(curses.BUTTON5_PRESSED),('next',None))
 
 class ActionTests(unittest.TestCase):
-    def test_mouse_actions_share_selection_send_done_and_exports_with_keyboard(self):
+    def test_mouse_actions_share_selection_send_and_done_with_keyboard(self):
         import tempfile
         from pathlib import Path
         from left_undone.core import Store
@@ -152,16 +160,12 @@ class ActionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             db=Store(Path(folder)/'db','test');self.addCleanup(db.close)
             db.add('import','First task');db.add('import','Second task')
-            first,second=db.items();sent=[];export=Path(folder)/'out.md'
-            handle_action(('item',first['id']),db,db.items(),sent.append,export)
+            first,second=db.items();sent=[]
+            handle_action(('item',first['id']),db,db.items(),sent.append)
             self.assertTrue(db.items()[0]['selected']);self.assertEqual(sent,[])
-            handle_action(('key','1'),db,db.items(),sent.append,export)
+            handle_action(('key','1'),db,db.items(),sent.append)
             self.assertEqual(sent,['You left this undone: First task']);self.assertEqual(len(db.items()),2)
-            handle_action(('item',first['id']),db,db.items(),sent.append,export)
-            with self.assertRaises(DoneOffer) as offer:handle_action(('key','2'),db,db.items(),sent.append,export)
+            handle_action(('item',first['id']),db,db.items(),sent.append)
+            with self.assertRaises(DoneOffer) as offer:handle_action(('key','2'),db,db.items(),sent.append)
             confirm_done(db,offer.exception)
             self.assertEqual([i['id'] for i in db.items()],[second['id']])
-            handle_action(('key','3'),db,db.items(),sent.append,export)
-            export.write_text(export.read_text()+'- [ ] Third task\n')
-            handle_action(('key','4'),db,db.items(),sent.append,export)
-            self.assertEqual(len(db.items()),2)

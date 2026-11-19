@@ -1,13 +1,13 @@
 id = "left-undone"
 name = "Left Undone"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.9.1"
-description = "Pendências e promessas de uma conversa Codex ou Claude"
+description = "Track open tasks and promises from a Codex or Claude conversation"
 platforms = ["linux"]
 
 [[actions]]
 id = "open"
-title = "Left Undone: abrir pendências"
+title = "Left Undone: Open tasks"
 contexts = ["workspace", "pane"]
 command = ["python3", "left-undone", "open"]
 
@@ -19,6 +19,6 @@ command = ["python3", "left-undone", "panel"]
 
 [[panes]]
 id = "picker"
-title = "Left Undone: escolher conversa"
+title = "Left Undone: Choose conversation"
 placement = "split"
 command = ["python3", "left-undone", "pick"]

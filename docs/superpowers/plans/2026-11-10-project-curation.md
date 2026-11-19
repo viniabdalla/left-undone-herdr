@@ -29,8 +29,6 @@ callback; native task snapshots retain absent items in curated project mode.
 
 Run `python3 -m unittest discover -s tests -q`, compileall and git diff --check.
 
-## Resultado
+## Result
 
-Etapas 1–3 concluídas: 86 testes, revisão independente com quatro correções,
-teste real gpt-6-luna/low e teste de consumo da skill. Ativação local com backup
-realizada; publicação e distribuição seguem a instalação existente.
+Steps 1–3 completed with 86 tests, four fixes from independent review, a live gpt-6-luna/low test and a test of skill consumption. Local activation and backup completed. Publication and distribution follow the existing installation process.

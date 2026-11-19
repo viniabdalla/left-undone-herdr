@@ -10,6 +10,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from .language import tr
 
 from . import runtime
 
@@ -45,11 +46,11 @@ def has_fresh_marker(history, marker):
 def check_pane(proc, context, marker):
     live = runtime.raw_herdr('agent', 'get', proc['pane'], env=context)['agent']
     if live.get('agent') != 'codex' or live.get('pane_id') != proc['pane']:
-        raise RuntimeError('O painel não corresponde ao processo Codex')
+        raise RuntimeError(tr('Panel does not match the Codex process'))
     foreground = runtime.raw_herdr('pane', 'process-info', '--pane', proc['pane'],
                                    env=context)['process_info']['foreground_processes']
     if proc['pid'] not in [item['pid'] for item in foreground]:
-        raise RuntimeError('O processo não está em primeiro plano')
+        raise RuntimeError(tr('The process is not in the foreground'))
     result = subprocess.run([context.get('HERDR_BIN_PATH', 'herdr'), 'pane', 'read',
                              proc['pane'], '--source', 'visible', '--format', 'text'],
                             env=context, capture_output=True, text=True, timeout=20)
@@ -57,7 +58,7 @@ def check_pane(proc, context, marker):
     # Join wrapped lines only; never accept a prefix or repair token characters.
     visible=re.sub(r'\r?\n[ \t]*','',result.stdout)
     if result.returncode or marker not in visible:
-        raise RuntimeError('A marca não está visível no painel')
+        raise RuntimeError(tr('The marker is not visible in the pane'))
     return live
 
 
@@ -74,15 +75,15 @@ def recover(marker,wait_seconds=6):
             if remaining<=0:raise RuntimeError(str(error)) from None
             time.sleep(min(.25,remaining))
         except subprocess.TimeoutExpired as error:
-            raise RuntimeError('Tempo esgotado ao recuperar o vínculo; confira o registro antes de tentar novamente') from error
+            raise RuntimeError(tr('Time out when recovering the link; check the record before trying again')) from error
 
 
 def _recover(marker):
     if not re.fullmatch(r'LU-[0-9a-f]{32}', marker or ''):
-        raise RuntimeError('Use uma marca nova LU- seguida de 32 dígitos hexadecimais na mensagem de commentary')
+        raise RuntimeError(tr('Use a fresh LU- marker followed by 32 hexadecimal digits in a commentary message'))
     session = os.environ.get('CODEX_THREAD_ID', '')
     if not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', session):
-        raise RuntimeError('CODEX_THREAD_ID atual ausente; execute pela conversa Codex')
+        raise RuntimeError(tr('CODEX_THREAD_ID is missing. Run this from the Codex conversation.'))
     matches = [];checked=0;histories=0;recent=0;reasons=[]
     for proc in runtime.processes():
         if proc['kind'] != 'codex':continue
@@ -102,24 +103,24 @@ def _recover(marker):
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
             reasons.append(f"{proc['pane']}: {str(error)[:120]}")
     if len(matches)>1:
-        raise RuntimeError('Marca visível em mais de um processo/painel; nenhum registro realizado. Publique uma marca nova exclusiva desta conversa.')
+        raise RuntimeError(tr('Marker visible in multiple panes. Nothing registered. Post a fresh marker in this conversation.'))
     if not matches:
-        stage=('nenhum processo Codex com contexto Herdr' if not checked else
-               'histórico do UUID atual não encontrado' if not histories else
-               'marca ainda não encontrada em commentary recente no histórico' if not recent else
-               'marca/processo não confirmados no painel visível')
+        stage=(tr('no Codex process with Herdr context') if not checked else
+               tr('current UUID history not found') if not histories else
+               tr('Marker not found in recent commentary') if not recent else
+               tr('Marker and process could not be verified in the visible pane'))
         details='; '.join(dict.fromkeys(reasons)) if recent else ''
-        raise EvidencePending('Recuperação: '+stage+'. Publique uma marca nova visível nesta conversa.'+
+        raise EvidencePending(tr('Recovery: ')+stage+tr('. Post a fresh marker visible in this conversation.')+
                               (' '+details if details else ''))
     proc, env, context, history, live = matches[0]
     hook = Path(proc['account']) / 'herdr-agent-state.sh'
-    if not hook.is_file():raise RuntimeError('Integração nativa ausente nesta conta; confira herdr integration status')
+    if not hook.is_file():raise RuntimeError(tr('Native integration missing in this account; check out herdr integration status'))
     # Recheck after discovery so a reused PID or pane cannot authorize a report.
     if runtime.process_info(proc['pid']) != proc:
-        raise RuntimeError('Processo mudou durante a recuperação; nenhum registro realizado')
+        raise RuntimeError(tr('Process changed during recovery. Nothing registered.'))
     fresh = check_pane(proc, context, marker)
     if fresh.get('terminal_id') != live.get('terminal_id'):
-        raise RuntimeError('Terminal mudou durante a recuperação; nenhum registro realizado')
+        raise RuntimeError(tr('Terminal changed during recovery. Nothing registered.'))
     hook_env = {**env, 'CODEX_THREAD_ID': session}
     result = subprocess.run(['/bin/sh', str(hook), 'session'], env=hook_env,
         input=json.dumps({'hook_event_name': 'SessionStart', 'session_id': session,
@@ -127,7 +128,7 @@ def _recover(marker):
         capture_output=True, text=True, timeout=20)
     binding = runtime.Binding('codex', session, proc['account'], proc['pane'],
         live['terminal_id'], live['workspace_id'], str(history), proc['pid'], proc['started'])
-    if result.returncode:raise RuntimeError('A integração nativa não concluiu a recuperação')
+    if result.returncode:raise RuntimeError(tr('Native integration did not complete recovery'))
     reported = runtime.raw_herdr('agent', 'get', proc['pane'], env=context)['agent']
     runtime.verify_live(binding, reported)
     for key in list(os.environ):

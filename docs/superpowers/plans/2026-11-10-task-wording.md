@@ -2,29 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Manter o técnico junto de uma tarefa curta e fácil de entender.
+**Goal:** Keep the technical term alongside a short task that is easy to understand.
 
-**Architecture:** Alterar os prompts existentes dos dois analisadores, usados
-pelos CLIs Codex e Claude; preservar validação e esquema JSON.
+**Architecture:** Edit the two existing analyzer prompts used by the Codex and Claude CLIs. Preserve validation and the JSON schema.
 
-**Tech Stack:** Python, prompts estruturados, CLIs autenticados existentes.
+**Tech Stack:** Python, structured prompts, existing authenticated CLIs.
 
 **Spec:** docs/superpowers/specs/2026-11-10-task-wording-design.md
 
 ## Global Constraints
 
-Sem mudar modelo, limites de texto, escopo, evidência ou critérios de conclusão.
+Preserve models, text limits, scope, evidence and completion criteria.
 
 ## Review Focus
 
-Não inventar termos; preservar requisitos distintos; não transformar exemplos em
-trabalho; não parafrasear evidence; não reescrever listas antigas só pelo estilo.
+Keep distinct requirements, avoid inventing terms or turning examples into tasks, preserve evidence verbatim and avoid rewriting old lists purely for style.
 
-### Task 1: Orientar e conferir respostas reais
+### Task 1: Guide and verify real responses
 
-- [x] Editar somente as instruções de texto em runtime.py e curation.py.
-- [x] Exercitar ambos os prompts com LLM real e revisar os textos/ações obtidos.
-- [x] Executar suíte existente, compileall e diff --check.
-- [x] Documentar o comportamento, concluir a pendência e registrar o resultado.
+- [x] Edit only the text instructions in runtime.py and curation.py.
+- [x] Exercise both prompts with a real model and review the generated text and actions.
+- [x] Run the existing suite, compileall and diff --check.
+- [x] Document the behavior, complete the task and record the result.
 
-Resultado: docs/task-wording-validation-2026-11-10.md.
+Result: docs/task-wording-validation-2026-11-10.md.

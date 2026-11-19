@@ -1,0 +1,316 @@
+"""Hand off a Codex conversation to a verified successor in a new split."""
+import fcntl
+import json
+import os
+import re
+import secrets
+import shlex
+import subprocess
+import time
+from contextlib import closing
+from dataclasses import asdict, replace
+from pathlib import Path
+from uuid import UUID
+
+from . import runtime
+from .app import atomic_json
+from .exchange import export_snapshot, import_selected, open_exchange_ids
+from .language import tr
+from .projects import project_store
+from .repository import project_root, session_project
+from .runtime import Binding
+
+
+def receipt(history, offset, marker):
+    with Path(history).open('rb') as stream:
+        stream.seek(offset)
+        for line in stream:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            payload = row.get('payload', {})
+            if row.get('type') != 'event_msg' or payload.get('type') != 'task_complete':
+                continue
+            for text in (payload.get('last_agent_message') or '').splitlines():
+                if text.startswith(marker+' ') and text[len(marker):].strip():
+                    return text[len(marker):].strip()
+    return ''
+
+
+def completed_init(history):
+    """Require a completed native /init turn before delivering the handoff."""
+    initializing = False
+    with Path(history).open('rb') as stream:
+        for line in stream:
+            if not line.endswith(b'\n'):
+                break
+            row = json.loads(line)
+            p = row.get('payload', {})
+            if row.get('type') == 'event_msg':
+                if p.get('type') == 'task_started':
+                    initializing = False
+                if p.get('type') == 'task_complete' and initializing and p.get('last_agent_message'):
+                    return True
+            if row.get('type') == 'response_item' and p.get('role') == 'user':
+                if any(part.get('text', '').startswith('Generate a file named AGENTS.md')
+                       for part in p.get('content', []) if isinstance(part, dict)):
+                    initializing = True
+    return False
+
+
+def status_session(screen):
+    matches = re.findall(r'^\s*Session:\s+([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})[ \t]*$', screen, re.M)
+    return matches[-1] if len(set(matches)) == 1 else None
+
+
+def read_screen(binding):
+    return subprocess.run([os.environ.get('HERDR_BIN_PATH','herdr'), 'pane','read',
+                           binding.pane,'--source','visible'], check=True, capture_output=True,
+                          text=True, timeout=5).stdout
+
+
+def same_terminal(binding, project):
+    live = runtime.herdr('agent','get',binding.pane)['agent']
+    info = runtime.herdr('pane','process-info','--pane',binding.pane)['process_info']
+    proc = runtime.process_info(binding.pid)
+    if (not proc or any(proc[k] != getattr(binding,k) for k in ('account','started','pane','kind'))
+            or binding.pid not in [p['pid'] for p in info['foreground_processes']]
+            or any(live.get(k) != v for k,v in [('pane_id',binding.pane),('terminal_id',binding.terminal),
+                                                  ('workspace_id',binding.workspace),('agent','codex')])
+            or project_root(live.get('foreground_cwd') or '/') != Path(project)):
+        raise RuntimeError('Codex terminal or worktree changed')
+    return live
+
+
+def wait(check, seconds, message):
+    deadline = time.monotonic()+seconds
+    while True:
+        value = check()
+        if value:
+            return value
+        if time.monotonic() >= deadline:
+            raise RuntimeError(message)
+        time.sleep(.4)
+
+
+def identified(binding, project, expected=None, previous=None):
+    # /status comes from the interactive client itself. Herdr can retain the old
+    # session UUID after /new. Never route the handoff using that stale value.
+    live = same_terminal(binding, project)
+    if live.get('agent_status') not in ('idle','done'):
+        raise RuntimeError('Wait for Codex to finish in the linked pane')
+    probe_at = 0
+
+    def check():
+        nonlocal probe_at
+        now = time.monotonic()
+        if now >= probe_at:
+            live = same_terminal(binding, project)
+            if live.get('agent_status') not in ('idle','done'):
+                return None
+            runtime.herdr('agent','prompt',binding.pane,'/status')
+            probe_at = now + 4
+            time.sleep(.3)
+        sid = status_session(read_screen(binding))
+        if expected and sid and sid != expected:
+            raise RuntimeError(tr('Panel linked to a different conversation.'))
+        if sid and sid != previous:
+            same_terminal(binding, project)
+            return sid
+    return wait(check, 24, 'Could not verify the active Codex UUID via /status')
+
+
+def journal(root, binding):
+    return root/(binding.key+'.renewal.json')
+
+
+def confirmed_successor(root, binding, pane, live=None):
+    """Follow the verified successor while the monitor stays in its own pane."""
+    current = binding
+    seen = set()
+    live_sid = (pane.get('agent_session') or {}).get('value')
+    while current.key not in seen:
+        seen.add(current.key)
+        path = journal(root,current)
+        if not path.exists():
+            break
+        job = json.loads(path.read_text())
+        if job['stage'] != 'complete':
+            break
+        new = Binding(**job['binding'])
+        if job.get('pane') == new.pane and job.get('terminal') == new.terminal and live is not None:
+            peer = live.get(new.pane,{})
+            if new.workspace != current.workspace or new.account != current.account:
+                break
+            current = new
+            live_sid = ((peer.get('agent_session') or {}).get('value')
+                        if peer.get('terminal_id') == new.terminal else None)
+            continue
+        if current.session == live_sid:
+            break
+        if (new.terminal, new.pid, new.started, new.account, new.pane) != (
+                current.terminal, current.pid, current.started, current.account, current.pane):
+            break
+        current = new
+    return current if current.session == live_sid else binding
+
+
+def ready_terminal(binding, project):
+    live = same_terminal(binding,project)
+    return live if live.get('agent_status') in ('idle','done') else None
+
+
+def active_source(binding, project):
+    sid = identified(binding,project)
+    source = replace(binding,session=sid,history=str(runtime.resolve_history('codex',binding.account,sid)))
+    if session_project(source) != Path(project):
+        raise ValueError('Active conversation is in a different worktree')
+    return source
+
+
+def allocated_pane(binding, job):
+    """Recover a split even if the coordinator stopped before saving its ID."""
+    matches = []
+    for pane in runtime.herdr('pane','list','--workspace',binding.workspace)['panes']:
+        if pane['tab_id'] != job['tab'] or pane['pane_id'] == binding.pane:
+            continue
+        info = runtime.herdr('pane','process-info','--pane',pane['pane_id'])['process_info']
+        try:
+            env = runtime.process_environment(info['shell_pid'])
+        except (KeyError,OSError):
+            continue
+        if env.get('LEFT_UNDONE_HANDOFF') == job['token']:
+            matches.append(pane)
+    if len(matches) != 1:
+        raise RuntimeError('Could not identify the new split. Check the panes before retrying.')
+    return matches[0]
+
+
+def split_binding(binding, job):
+    for new in runtime.candidates()[0]:
+        if (new.kind,new.account,new.workspace,new.pane,new.terminal) == (
+                'codex',binding.account,binding.workspace,job['pane'],job['terminal']):
+            if new.session in (binding.session,job['source']['session']):
+                raise RuntimeError('Expected a fresh Codex session')
+            if runtime.process_environment(new.pid).get('LEFT_UNDONE_HANDOFF') != job['token']:
+                raise RuntimeError('Unexpected process in the handoff split')
+            if session_project(new) != Path(job['project']):
+                raise RuntimeError('Successor worktree differs from source')
+            if runtime.verify(new).get('agent_status') in ('idle','done'):
+                return new
+
+
+def run(root, binding, confirm_source=None):
+    if binding.kind != 'codex':
+        raise ValueError('Handoff requires a Codex session')
+    path = journal(root,binding)
+    with (root/(binding.key+'.renewal.lock')).open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX | fcntl.LOCK_NB)
+        job = json.loads(path.read_text()) if path.exists() else {}
+        def save(stage, **values):
+            job.update(values, stage=stage)
+            atomic_json(path,job)
+
+        if not job or job['stage'] == 'confirm':
+            project = session_project(binding)
+            if project is None:
+                raise ValueError('Cannot verify the conversation worktree')
+            source = active_source(binding,project)
+            with closing(project_store(root,binding)) as store:
+                if Path(store.project) != project:
+                    raise ValueError('The linked project differs from the active worktree')
+                selection = [[i['id'],i['text']] for i in store.items()]
+                if source.session != binding.session and (
+                        not confirm_source or confirm_source != job.get('approval')
+                        or source.session != job.get('active') or selection != job.get('selection')):
+                    save('confirm',active=source.session,selection=selection,approval=secrets.token_hex(12))
+                    raise RuntimeError(tr('Different session. H again: take {0} tasks?').format(len(selection)))
+                _, ids = export_snapshot(store,project)
+            token = secrets.token_hex(12)
+            identified(source,project,source.session)
+            save('preparing',project=str(project),token=token,ids=ids,source=asdict(source),
+                 offset=Path(source.history).stat().st_size)
+            runtime.herdr('agent','prompt',source.pane,f"""Prepare a Left Undone handoff in {project}.
+Update TODO.md for its local consumers, preserving its format. Open tasks have been exported to .left-undone/tasks.md.
+Review the worktree and branch; commit and push only if appropriate and authorized under local instructions.
+Save the handoff following this project's local handoff procedure. If anything required fails, stop and explain.
+Only after success, include a separate plain-text line in your FINAL response reading
+READY-{token} followed by a space and the actual saved handoff ID, path or concise handoff text.
+Keep this pane open. Left Undone will launch the successor in a split.""")
+        project = job['project']
+        if job['stage'] == 'preparing':
+            source = Binding(**job.get('source',asdict(binding)))
+            ref = wait(lambda: receipt(source.history,job['offset'],'READY-'+job['token']),
+                       300,'Handoff not confirmed. Check the conversation, then press H to continue.')
+            live = wait(lambda: ready_terminal(source,project),30,'Wait for Codex')
+            identified(source,project,source.session)
+            save('allocating',ref=ref,source=asdict(source),tab=live['tab_id'])
+            pane = runtime.herdr('pane','split','--pane',source.pane,'--direction','down',
+                                 '--cwd',project,'--env','LEFT_UNDONE_HANDOFF='+job['token'],
+                                 '--env','CODEX_HOME='+source.account,'--no-focus')['pane']
+            save('launch',pane=pane['pane_id'],terminal=pane['terminal_id'])
+        if job['stage'] == 'allocating':
+            pane = allocated_pane(binding,job)
+            save('launch',pane=pane['pane_id'],terminal=pane['terminal_id'])
+        if job['stage'] == 'launch':
+            pane = allocated_pane(binding,job)
+            if (pane['pane_id'],pane['terminal_id']) != (job['pane'],job['terminal']) or pane.get('agent'):
+                raise RuntimeError('Unexpected successor pane')
+            save('starting')
+            command = shlex.join(['env','-u','CODEX_THREAD_ID','codex','--no-daemon','-C',project,
+                                  'You are the successor in a Left Undone handoff. Reply only READY and wait for /init.'])
+            subprocess.run([os.environ.get('HERDR_BIN_PATH','herdr'),'pane','run',job['pane'],command],
+                           check=True,capture_output=True,text=True,timeout=20)
+        if job['stage'] == 'starting':
+            new = wait(lambda: split_binding(binding,job),180,'Check Codex startup in the successor split, then press H.')
+            identified(new,project,new.session)
+            save('initializing',successor=new.session,binding=asdict(new))
+            runtime.send(new,'/init')
+        if job['stage'] == 'switching':
+            sid = identified(binding,project,previous=binding.session)
+            # Reject a user-initiated resume of an older thread on the same pane.
+            uid = UUID(sid)
+            if uid.version != 7 or (uid.int >> 80)/1000 < job['since']-1:
+                raise ValueError('Codex did not open a fresh session')
+            save('initializing',successor=sid)
+            same_terminal(binding,project)
+            runtime.herdr('agent','prompt',binding.pane,'/init')
+            time.sleep(2)
+        if job['stage'] == 'initializing':
+            sid = job['successor']
+            target = Binding(**job['binding']) if 'binding' in job else binding
+            def init_finished():
+                if same_terminal(target,project).get('agent_status') not in ('idle','done'):
+                    return False
+                try:
+                    history = runtime.resolve_history('codex',binding.account,sid)
+                except RuntimeError:
+                    return False
+                return completed_init(history) and (Path(project)/'AGENTS.md').is_file()
+
+            wait(init_finished,300,'Finish /init in the Codex pane, then press H')
+            identified(target,project,sid)
+            history = runtime.resolve_history('codex',binding.account,sid)
+            new = replace(target, session=sid, history=str(history))
+            if session_project(new) != Path(project):
+                raise ValueError('New session worktree differs from source')
+            save('restoring',binding=asdict(new),offset=history.stat().st_size)
+            prompt = f"""Restore the handoff according to this project's local procedure. Reference: {job['ref']}
+Verify the worktree is {project}. Left Undone verifies the link separately.
+Once restored, include a separate plain-text line in your FINAL response: RESTORED-{job['token']} OK"""
+            live = same_terminal(new,project)
+            if (live.get('agent_session') or {}).get('value') != sid:
+                prompt += "\nUse the Left Undone skill's marker recovery to register this thread before confirming."
+            runtime.herdr('agent','prompt',new.pane,prompt)
+        if job['stage'] == 'restoring':
+            new = Binding(**job['binding'])
+            wait(lambda: receipt(new.history,job['offset'],'RESTORED-'+job['token']) == 'OK',300,
+                 'Restoration not confirmed. Check the successor and press H to continue.')
+            runtime.verify(new)
+            with closing(project_store(root,new,project)) as store:
+                import_selected(store,job['ids'],project)
+                if set(job['ids']) - open_exchange_ids(store):
+                    raise RuntimeError('Some exported tasks are missing. Keep the source pane open.')
+            save('complete')
+        return Binding(**job['binding'])

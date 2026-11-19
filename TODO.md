@@ -2,33 +2,37 @@
 status: ativo
 area: omarchy
 prioridade: media
-resumo: Painel de tarefas e promessas por conversa no Herdr
-atualizado: 2026-11-17
+resumo: Herdr panel for tracking tasks and promises by conversation
+atualizado: 2026-11-18
 ---
 
-# TODO — Left Undone Herdr
+# TODO — Left Undone for Herdr
 
-## Em andamento
-- [ ] Revisar a proteção parcial do Codex após /new e /resume (branch fix/codex-active-thread no worktree ../left-undone-herdr-codex-title, sem commit)
-- [ ] Modo sem projeto: auditor de promessas ainda não mostra tarefas do usuário (VOCÊ) — primeiro trabalho do Dev (Hermes), conduzido pelo plano em ~/Projects/dev-hermes-setup/docs/orquestracao.md
+## In progress
 
-## Próximo
-- [ ] Reprocessar as 2 respostas do NAS (nas-tropico) com o curador novo e arquivar a tarefa genérica antiga
-- [ ] Curador: não concluir tarefa sem prova de que foi feita (ex.: fechou "checar erros SATA" só porque os erros subiram)
-- [ ] Acompanhar a conversa visível e corrigir UUID antigo após /new ou /resume no Codex antes da primeira resposta; revalidar troca/retomada (falha reproduzida ao vivo)
-- [ ] Curadoria / resumo de compactação do Claude: não tratar o resumo automático (isCompactSummary) como pedido do usuário; conferir isMeta e textos de sistema do Codex
+- [ ] Review the partial protection for Codex after `/new` and `/resume` (uncommitted on branch `fix/codex-active-thread` in worktree `../left-undone-herdr-codex-title`).
+- [ ] Make the promise auditor show user-owned tasks in sessions without a project. This is Dev's first Hermes assignment, following `~/Projects/dev-hermes-setup/docs/orquestracao.md`.
 
-## Bloqueado
-- [ ] Eliminar janela entre verificação e envio — depende de envio condicionado ao UUID na API Herdr
+## Next
 
-## Feito
-- [x] 2026-11-16 Painel por projeto com títulos destacados, grupos IA/você, histórico e datas discretas
-- [x] 2026-11-16 Comando curto abre seletor global; reencontrar painel existente dá foco a ele
-- [x] 2026-11-16 Mostrar data de criação e alternar ordem por mais recentes/antigas no topo, preservando seleção
-- [x] 2026-11-11 Atualizar tropico-2, omarchy2 e Omarchy novo para 70b61a3 (git pull + install.py; testes OK nas três)
-- [x] 2026-11-11 Criar CLAUDE.md com comandos e arquitetura (identidade, coleta, curadoria, armazenamento)
-- [x] 2026-11-11 Curador: separar listas de pendências em itens (sem tarefa guarda-chuva) e marcar tarefas do usuário com VOCÊ
-- [x] 2026-11-10 Seletor de conversas mostra os títulos dos painéis do Herdr junto dos IDs
-- [x] 2026-11-10 Exigir confirmação antes de concluir manualmente; cancelar preserva seleção e página
-- [x] 2026-11-10 Codex ocupado: perguntar antes de colocar os selecionados na fila nativa; cancelar preserva seleção e página (fila Claude indisponível nesta versão)
-- [x] 2026-11-10 Orientar o LLM a manter o termo técnico junto da tarefa em linguagem simples, sem explicação completa
+- [ ] Reprocess the two NAS replies from `nas-tropico` with the new curator and archive the old generic task.
+- [ ] Require evidence of completion. The curator closed “check SATA errors” when the error count went up.
+- [ ] Track the visible Codex conversation and correct a stale UUID after `/new` or `/resume` before the first reply. Repeat the live switch and resume checks that exposed this failure.
+- [ ] Exclude Claude's automatic compaction summaries (`isCompactSummary`) from user requests during curation. Check `isMeta` and Codex system messages as well.
+
+## Blocked
+
+- [ ] Close the gap between verification and sending. This requires a Herdr API that can condition delivery on the UUID.
+
+## Done
+
+- [x] 2026-11-16 Added project panels with highlighted titles, separate groups for the agent and the user, history, and unobtrusive dates.
+- [x] 2026-11-16 Made the short command open the global picker and focus an existing panel when reopened.
+- [x] 2026-11-16 Added creation dates and newest-first or oldest-first sorting while preserving selections.
+- [x] 2026-11-11 Updated tropico-2, omarchy2 and the new Omarchy installation to `70b61a3` with `git pull` and `install.py`. Tests passed on all three.
+- [x] 2026-11-11 Added commands and architecture notes to CLAUDE.md covering identity, collection, curation and storage.
+- [x] 2026-11-11 Made the curator split lists into individual tasks, omit redundant umbrella tasks and mark user-owned tasks with `VOCÊ`.
+- [x] 2026-11-10 Added Herdr pane titles alongside IDs in the conversation picker.
+- [x] 2026-11-10 Added confirmation for manual completion. Canceling preserves the selection and page.
+- [x] 2026-11-10 Added confirmation before queuing selected items for busy Codex sessions. Canceling preserves the selection and page. Claude queuing was unavailable in this version.
+- [x] 2026-11-10 Updated model instructions to pair technical terms with plain-language tasks and omit lengthy explanations.

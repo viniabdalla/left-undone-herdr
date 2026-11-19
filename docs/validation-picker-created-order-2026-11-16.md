@@ -1,42 +1,23 @@
-# Validação — seletor global e data de criação
+# Global picker and creation date validation
 
-2026-11-16. Implementado em worktree `left-undone-herdr-picker-dates`, branch
-`feat/picker-created-order`, a partir da main `0ae0c31`. Preservado o worktree
-`left-undone-herdr-codex-title` e seu commit exclusivo de identidade Codex.
+On 2026-11-16, implementation used worktree `left-undone-herdr-picker-dates` and branch `feat/picker-created-order` from main `0ae0c31`. The `left-undone-herdr-codex-title` worktree and its unique Codex identity commit were preserved.
 
-## Verificações
+## Checks
 
-- Base: 117 testes passaram antes de alterar código.
-- Reproduzidas as falhas do comando curto e do foco ao reutilizar painel.
-- Testes de criação falharam antes da implementação; validam timestamp da fonte,
-  edição, replay, registros antigos, importação, tombstones e múltiplas conexões.
-- Teste PTY validou tecla 6, clique no botão e preservação da seleção durante
-  inversões, envio, fila e confirmação. Desconectar a inversão faz o teste falhar.
-- Suíte final: `python3 -m unittest discover -s tests -q` — 128 testes OK no
-  worktree e no checkout instalado. `compileall` e `git diff --check` OK.
-- Revisão independente: nenhum problema no código; pedido de preservar duas
-  entradas antigas do TODO foi avaliado contra a regra de manter só dez em Feito.
-- Painel descartável no Herdr, com estado em `/tmp`: ordem recente e antiga,
-  datas no horário local e desconhecidos ao final. Snapshots locais ignorados:
-  `docs/evidence/2026-11-16-creation-order-newest.txt` e `...-oldest.txt`.
-- Comando instalado sem argumentos executado de `/tmp` e com estado temporário:
-  abriu seletor global incluindo as duas conversas pedidas. Snapshot local:
-  `docs/evidence/2026-11-16-global-picker.txt`. Nenhuma conversa escolhida no teste.
-- Painel e seletor de teste fechados; estado descartável removido.
+- Baseline before code changes: 117 tests passed.
+- Reproduced the short-command failure and the focus failure on panel reuse.
+- Creation tests failed before implementation. They cover source timestamps, editing, replay, old records, import, tombstones and multiple connections.
+- A PTY test verified key 6, button clicks and selection across order changes, sending, queueing and confirmation. Disconnecting the order toggle makes the test fail.
+- Final suite: `python3 -m unittest discover -s tests -q` passed 128 tests in both the worktree and installed checkout. `compileall` and `git diff --check` passed.
+- Independent review found no code issues. A request to preserve two old TODO entries was assessed against the ten-entry limit in Done.
+- A disposable Herdr panel with state in `/tmp` showed newest and oldest first, local dates and unknowns last. Git-ignored local snapshots: `docs/evidence/2026-11-16-creation-order-newest.txt` and `...-oldest.txt`.
+- Running the installed command with no arguments from `/tmp` and temporary state opened the global picker with both requested conversations. Local snapshot: `docs/evidence/2026-11-16-global-picker.txt`. The test did not choose a conversation.
+- The test panel and picker were closed and disposable state was removed.
 
-## Aplicação local
+## Local installation
 
-Arquivos revisados aplicados ao checkout main sem commit, reset, merge ou push.
-Backup SQLite consistente e local em `docs/evidence/` antes de carregar a nova
-versão nos painéis. Recarregados apenas os dois painéis abertos nesta conversa;
-confirmados botão de ordem e datas na renderização. Herdr permaneceu ativo.
-Testes não usaram a base nem sessões reais; a recarga final foi uso da instalação.
+Reviewed files were applied to the main checkout without commit, reset, merge or push. A consistent local SQLite backup in `docs/evidence/` preceded the panel update. Only the two open panels in this conversation were reloaded. Their rendered output confirmed the order button and dates. Herdr stayed active. Tests used disposable state and sessions. The final reload used the installed version.
 
-## Limites
+## Limits
 
-Registros anteriores sem data comprovável continuam desconhecidos; nenhum ID
-ou timestamp mutável foi convertido em data de criação. Exportação Markdown
-mantém seu formato: importar em outro estado representa nova entrada local.
-A preferência de ordem dura até fechar o painel. Outros painéis já abertos
-carregam a nova interface quando forem fechados e reabertos. As quatro melhorias
-de confiabilidade da curadoria continuam fora desta entrega.
+Older records without a verifiable date still show an unknown date. Neither IDs nor mutable timestamps were converted into creation dates. Markdown export preserves its format. Importing into another state creates a new local entry. The order preference lasts until the panel closes. Other open panels load the new interface when reopened. The four curation reliability improvements were outside this delivery.

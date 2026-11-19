@@ -1,11 +1,10 @@
-# Coletar agora Implementation Plan
+# Collect Now Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** Solicitar coleta imediata por botão e tecla 5.
+**Goal:** Request immediate collection with a button or key 5.
 
-**Architecture:** Arquivo de solicitação por vínculo acorda o coletor existente;
-o loop consome o pedido antes de verificar identidade e coletar.
+**Architecture:** A request file for each binding wakes the existing collector. The loop consumes the request before checking identity and collecting.
 
 **Tech Stack:** Python, curses, unittest.
 
@@ -13,34 +12,24 @@ o loop consome o pedido antes de verificar identidade e coletar.
 
 ## Global Constraints
 
-Preservar coleta automática, validação de identidade e exclusão mútua.
-Não alterar modelos nem reprocessar eventos já consumidos.
+Preserve automatic collection, identity checks and mutual exclusion. Keep the models and avoid reprocessing consumed events.
 
 ## Review Focus
 
-Cliques repetidos; pedido durante coleta; espera após erro; coletor encerrado;
-layout estreito com itens selecionados.
+Check repeated clicks, requests during collection, error backoff, collector shutdown and narrow layouts with items selected.
 
-### Task 1: Botão e coleta sob demanda
+### Task 1: Button and on-demand collection
 
-**Files:** `left_undone/ui.py`, `left_undone/ui_layout.py`,
-`left_undone/app.py`, novo `left_undone/collection_request.py`,
-`tests/test_collection_request.py`, `tests/test_mouse_layout.py`.
+**Files:** `left_undone/ui.py`, `left_undone/ui_layout.py`, `left_undone/app.py`, new `left_undone/collection_request.py`, `tests/test_collection_request.py`, `tests/test_mouse_layout.py`.
 
-**Interfaces:** `request_collection(worker, path)` confirma processo ativo e
-grava pedido; `wait_for_collection(path, seconds)` interrompe espera no pedido.
+**Interfaces:** `request_collection(worker, path)` checks that the process is active and records the request. `wait_for_collection(path, seconds)` interrupts the wait when a request arrives.
 
-- [x] Escrever testes de layout e integração com coletor real, substituindo
-  somente verificação Herdr/análise externa por fixtures determinísticas.
-- [x] Observar falhas antes da implementação.
-- [x] Implementar solicitação agrupada, espera interrompível e botão/tecla 5.
-- [x] Rodar suíte completa e painel curses em PTY; atualizar README/skill/TODO.
-- [x] Revisar diff e registrar resultado operacional.
+- [x] Write layout and integration tests with the real collector. Use deterministic fixtures only for Herdr verification and external analysis.
+- [x] Observe failures before implementation.
+- [x] Coalesce requests, interrupt waits and implement the button and key 5.
+- [x] Run the full suite and the curses panel in a PTY. Update the README, skill and TODO.
+- [x] Review the diff and record the operational result.
 
-## Resultado
+## Result
 
-96 testes passaram; compileall e git diff --check sem erros.
-Clique/tecla 5 verificados em curses real via PTY. Layout conferido visualmente
-em prévia rasterizada de 40×24. Revisão independente sem achados.
-Histórico operacional registrado e verificado: 13fc5939-9e0f-4a2e-baf3-e6f7b08c41eb.
-Painel já aberto requer fechar/reabrir para carregar o código atualizado.
+96 tests passed. compileall and git diff --check reported no errors. A real curses PTY verified the click and key 5. A rasterized 40×24 preview confirmed the layout. Independent review reported no findings. Operational history entry 13fc5939-9e0f-4a2e-baf3-e6f7b08c41eb was recorded and verified. An already open panel requires closing and reopening to load the update.

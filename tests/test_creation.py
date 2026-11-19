@@ -32,10 +32,10 @@ class CreationTests(unittest.TestCase):
         self.assertEqual(db.import_md('- [ ] Closed'),0)
         again=self.store();self.assertIsNone(again.items()[0]['created_at'])
 
-    def test_new_imports_have_creation_date_shared_across_sessions_and_not_changed_by_edits(self):
+    def test_new_imports_keep_creation_date_after_reopen_and_edits(self):
         a=self.store(project=True);before=time.time();a.import_md('- [ ] New task')
         first=a.items()[0];self.assertGreaterEqual(first.get('created_at',0),before-.01)
-        b=self.store('b',project=True);self.assertEqual(b.items()[0]['created_at'],first['created_at'])
+        reopened=self.store('a',project=True);self.assertEqual(reopened.items()[0]['created_at'],first['created_at'])
         with a.conn:a.conn.execute('UPDATE items SET text=? WHERE id=?',('Rewritten',first['id']))
         self.assertEqual(a.items()[0]['created_at'],first['created_at'])
         self.assertEqual(a.import_md('- [ ] Rewritten'),0)

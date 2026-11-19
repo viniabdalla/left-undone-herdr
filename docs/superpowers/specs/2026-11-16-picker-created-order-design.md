@@ -1,13 +1,13 @@
-# Seletor global e ordem por criação
+# Global picker and creation order
 
-Aprovado por Vini na conversa de 2026-11-16: `left-undone` sem argumentos sempre apresenta as conversas verificáveis do Herdr, independentemente da pasta. Escolher uma conversa abre seu painel; se já existir, mostra o painel existente. `--repo` continua sendo um filtro explícito.
+Vini approved this behavior on 2026-11-16. Running `left-undone` without arguments always lists verifiable Herdr conversations regardless of directory. Choosing a conversation opens its panel or reveals its existing panel. `--repo` remains an explicit filter.
 
-O painel começa com as mais recentes primeiro. Um botão no topo, também pela tecla 6, alterna entre mais recentes e mais antigas. Cada item mostra data/hora local de criação; alterações de texto não mudam essa data. Datas desconhecidas ficam ao final em ambas as ordens, com desempate por ID; a ordenação não agrupa por origem. A escolha de ordem vale durante a abertura atual. Seleções continuam ligadas ao ID.
+The panel opens newest first. A top button and key 6 toggle newest or oldest first. Each item shows its local creation time, which stays fixed across edits. Unknown dates sort last in either direction, with ties broken by ID. Sort across all sources. The order applies for the current opening. Selections follow IDs.
 
-## Abordagens
+## Approaches
 
-Implementar no painel a ordenação da lista existente evita alterar a ordem interna usada pelos consumidores atuais. Uma tabela independente com timestamp imutável mantém a migração compatível com processos antigos e separada do relógio de proteção da curadoria. Usar IDs como datas ou reaproveitar o timestamp mutável da curadoria inventaria informação: não será feito. Registros legados sem fonte comprovável mostram “data desconhecida”. Novas importações usam a data de entrada local; coletas usam o timestamp da transcrição quando válido.
+Sorting in the panel preserves the existing internal order for other consumers. A separate table with immutable timestamps makes migration compatible with older processes and independent of the curator's conflict-detection clock. Neither IDs nor mutable curation timestamps establish creation dates. Legacy records without a verified source display “unknown date”. New imports use their local arrival time. Collected items use a valid transcript timestamp when available.
 
-## Limites
+## Boundaries
 
-Python stdlib, sem trocar modelos. Preservar proteção de identidade, concorrência, histórico, tombstones e formatos Markdown existentes. Não implementar as quatro melhorias de curadoria neste trabalho. Não alterar o worktree fix/codex-active-thread, não fazer commit/push ou reiniciar o Herdr. Validar usando somente estado temporário e sessões de teste; instalar arquivos somente após testes.
+Use the Python standard library and keep the existing models. Preserve identity checks, concurrency, history, tombstones and existing Markdown formats. The four curation improvements are separate work. Leave the fix/codex-active-thread worktree intact. Avoid commits, pushes and Herdr restarts. Validate with temporary state and test sessions only. Install files after testing.

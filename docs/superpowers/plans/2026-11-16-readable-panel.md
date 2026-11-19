@@ -1,29 +1,32 @@
-# Painel legível — Implementation Plan
+# Readable Panel Implementation Plan
 
-> **For agentic workers:** executar inline usando superpowers:executing-plans e testes antes da implementação.
+> **For agentic workers:** implement inline with superpowers:executing-plans and tests before implementation.
 
-**Goal:** painel claro por projeto e responsável, histórico e organização verificada dos itens existentes.
-**Architecture:** ProjectStore oferece visões sem mudar a associação; catálogo de projetos permite navegação. Layout dos cards separado do seletor de conversas. Histórico usa os mesmos IDs e apresenta encerramentos com motivo quando comprovado.
+**Goal:** Make tasks readable by project and owner, expose history and verify the organization of existing items.
+**Architecture:** ProjectStore provides views without changing the association. A project catalog supports navigation. Card layout is separate from the conversation picker. History retains IDs and shows reasons for closure when supported by evidence.
 **Tech Stack:** Python stdlib, SQLite, curses.
 **Spec:** docs/superpowers/specs/2026-11-16-readable-panel-design.md
 
 ## Global Constraints
 
-Preservar seleções por viewer, binding de envio, relógios da curadoria e histórico. Testes exclusivamente temporários. Nenhum reinício do Herdr ou commit/push.
+Preserve per-viewer selections, the delivery binding, curation clocks and history. Use only temporary test state. Avoid Herdr restarts, commits and pushes.
 
 ## Review Focus
 
-Visões de outros projetos nunca revelam promessas privadas; histórico não permite envio/conclusão; cards longos não perdem texto; painel estreito mantém controles; reorganização conserva IDs e registra motivos de baixa sem fingir entrega de duplicatas.
+Other projects' views protect private promises. History disables sending and completion. Long cards preserve all text and narrow panels keep controls. Reorganization preserves IDs and records closure reasons, distinguishing duplicates from delivered work.
 
-### Task 1: Visões de projeto e histórico
-- [x] Testar catálogo, visão sem reassociação, isolamento e motivos de encerramento.
-- [x] Implementar view_project, available_projects e history_items no ProjectStore. Testes passam.
+### Task 1: Project views and history
 
-### Task 2: Cards e navegação
-- [x] Testar grupos, títulos, datas discretas, paginação e controles em tamanhos pequenos.
-- [x] Implementar layout dos cards e navegação de projeto/histórico na UI. Atualizar testes PTY para alvos reais. Suite completa passa.
+- [x] Test the catalog, views without reassociation, isolation and closure reasons.
+- [x] Implement view_project, available_projects and history_items in ProjectStore. Tests pass.
 
-### Task 3: Aplicação e organização
-- [x] Revisar diff e testar painel descartável no Herdr. Aplicar arquivos revisados preservando mudanças anteriores.
-- [x] Backup real, conferir binding e itens contra evidências, locks de projetos, transação auditada para títulos/movimentação/baixas/datas.
-- [x] Reabrir somente o painel desta conversa e conferir renderização. Documentar validação e registrar atividade.
+### Task 2: Cards and navigation
+
+- [x] Test groups, titles, understated dates, pagination and controls at small sizes.
+- [x] Implement card layout and project/history navigation. Update PTY tests to use actual targets. The full suite passes.
+
+### Task 3: Apply changes and organize existing items
+
+- [x] Review the diff and test a disposable Herdr panel. Apply reviewed files while preserving earlier changes.
+- [x] Back up live state, check the binding and items against evidence, acquire project locks and use an audited transaction for titles, moves, closures and dates.
+- [x] Reopen only this conversation's panel and check its rendering. Document validation and record the activity.

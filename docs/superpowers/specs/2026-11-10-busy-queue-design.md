@@ -1,21 +1,9 @@
-# Confirmar fila quando o agente estiver ocupado
+# Confirm queueing when the agent is busy
 
-Comportamento aprovado por Vini: Enviar com agente ocupado pergunta se deseja
-colocar o pedido na fila do próprio agente. Confirmar enfileira; cancelar
-preserva a seleção. Agente livre continua recebendo diretamente. Pendências
-enviadas ou enfileiradas continuam abertas na lista.
+Vini approved prompting the user to queue a request with the agent when Send finds the agent busy. Confirm queues the request. Cancel preserves the selection. An idle agent receives the message directly. Sent and queued tasks stay open.
 
-Usar a fila nativa do Codex (`codex queue --thread UUID --message TEXT`),
-na conta verificada, sem `--resume` ou mensagem de interrupção. O CLI Claude
-instalado não oferece uma API equivalente: informar indisponibilidade e
-preservar seleção. Não criar fila interna/polling de envio nem alterar a
-proteção de UUID em desenvolvimento no outro worktree.
+Use the native Codex queue (`codex queue --thread UUID --message TEXT`) with the verified account, without `--resume` or an interrupt message. The installed Claude CLI has no equivalent API. Report that queueing is unavailable and preserve the selection. Avoid an internal queue or delivery polling. Leave the UUID protection under development in the other worktree intact.
 
-Congelar IDs/texto selecionados ao pedir envio. Revalidar identidade e itens
-ao confirmar. Alteração ou conclusão dos itens cancela o pedido, sem enviar.
-Falha/timeout não retenta nem limpa seleção; confirmação de sucesso limpa
-somente a seleção enviada. A confirmação aceita mouse e teclas 1/2/Esc.
+Freeze the selected IDs and text when the user requests delivery. Revalidate identity and items on confirmation. If an item changed or closed, cancel delivery. Errors and timeouts preserve selection without retrying. Success clears only the selection that was sent. The confirmation accepts mouse input and 1/2/Esc.
 
-Abordagens: fila nativa por UUID preserva o destino e o controle do harness;
-simular Enter durante trabalho pode interromper o turno; fila própria poderia
-reenviar a sessão errada após uma troca e não é o comportamento solicitado.
+The native UUID queue preserves the destination and gives the harness control. Simulating Enter during work could interrupt a turn. A separate queue could deliver to the wrong session after a switch and would depart from the requested behavior.

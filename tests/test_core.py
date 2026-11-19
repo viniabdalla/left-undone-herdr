@@ -79,6 +79,17 @@ class CoreTests(unittest.TestCase):
         c.poll();self.assertEqual({i['origin'] for i in self.db.items()},{'task','promise'})
         self.assertEqual(len(self.db.items()),2)
 
+    def test_claude_fork_skips_rows_owned_by_parent_session(self):
+        replies = []
+        for session in ['parent', 'fork']:
+            self.append({'type': 'assistant', 'uuid': session, 'sessionId': session,
+                         'message': {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': session}]}})
+        def audit(reply, opened):
+            replies.append(reply)
+            return {'add': [], 'done': []}
+        Collector(self.db, self.log, 'claude', audit, session_id='fork').poll()
+        self.assertEqual(replies, ['fork'])
+
     def test_promises_close_without_removing_tasks(self):
         self.db.add('task','Build','t')
         self.db.add('promise','Ship','p')

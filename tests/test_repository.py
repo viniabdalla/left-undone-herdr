@@ -47,7 +47,7 @@ class RepositoryTests(unittest.TestCase):
             Path(b.history).write_text(json.dumps(row)+'\n')
             self.assertIsNone(session_project(b))
 
-    def test_saved_sessions_and_counts_share_tasks_but_not_promises(self):
+    def test_saved_sessions_and_counts_only_include_each_sessions_own_tasks(self):
         from left_undone.repository import saved_sessions,pending_counts
         a=self.binding();b=self.binding('s2');other=self.binding('s3',cwd=self.other)
         for binding in [a,b,other]:
@@ -58,7 +58,7 @@ class RepositoryTests(unittest.TestCase):
         db.done([db.items()[1]['id']]);db.close()
         db=Store(self.state/'state.db',b.key);db.add('promise','second');db.add('promise','third');db.close()
         self.assertEqual({b.key for b in saved_sessions(self.state,self.repo)},{a.key,b.key})
-        self.assertEqual(pending_counts(self.state,[a,b,other]),{a.key:1,b.key:3,other.key:0})
+        self.assertEqual(pending_counts(self.state,[a,b,other]),{a.key:1,b.key:2,other.key:0})
 
     def test_explicit_project_survives_discovery_and_missing_history_is_isolated(self):
         from left_undone.projects import project_store
@@ -68,7 +68,7 @@ class RepositoryTests(unittest.TestCase):
         reopened=project_store(self.state,a)
         self.assertEqual(reopened.project,str(self.other));reopened.close()
         other=project_store(self.state,b)
-        self.assertEqual(other.items()[0]['text'],'Moved project');other.close()
+        self.assertEqual(other.items(),[]);other.close()
         missing=self.binding('missing');Path(missing.history).unlink()
         isolated=project_store(self.state,missing)
         self.assertEqual(isolated.items(),[]);isolated.close()
@@ -86,7 +86,7 @@ class RepositoryTests(unittest.TestCase):
 
     def test_empty_repo_does_not_open_global_picker(self):
         opened,api,out=self.run_cli(['open','--repo',str(self.repo)],[self.binding(cwd=self.other)])
-        opened.assert_not_called();api.assert_not_called();self.assertIn('Nenhuma sessão',out)
+        opened.assert_not_called();api.assert_not_called();self.assertIn('No active session',out)
 
     def run_cli(self,args,bindings,tty=False):
         output=io.StringIO()
@@ -132,7 +132,7 @@ class RepositoryTests(unittest.TestCase):
     def test_closed_session_explains_resume_without_opening(self):
         a=self.binding();(self.state/(a.key+'.binding.json')).write_text(json.dumps(asdict(a)))
         opened,api,out=self.run_cli(['open','--repo',str(self.repo)],[])
-        opened.assert_not_called();api.assert_not_called();self.assertIn('retom',out.lower())
+        opened.assert_not_called();api.assert_not_called();self.assertIn('resume',out.lower())
 
     def test_picker_filters_again_in_plugin_context_and_passes_counts(self):
         a=self.binding();other=self.binding('s2',cwd=self.other)

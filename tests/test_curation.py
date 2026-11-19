@@ -22,7 +22,7 @@ class CurationTests(unittest.TestCase):
         from left_undone.curation import Curator
         return Curator(self.a, analyze)
 
-    def test_global_update_done_and_new_task_are_applied_once(self):
+    def test_session_update_done_and_new_task_are_applied_once(self):
         self.a.import_md('- [ ] Add mouse\n- [ ] Build tests')
         mouse, tests = self.a.items()
         calls = []
@@ -35,27 +35,25 @@ class CurationTests(unittest.TestCase):
         reply = 'Tests passed. Mouse wheel remains. Keyboard support next.'
         curator.review(reply, '', 'event1');curator.review(reply, '', 'event1')
         self.assertEqual(len(calls), 1)
-        self.assertEqual({i['text'] for i in self.b.items()}, {'Mouse wheel support', 'Keyboard support'})
+        self.assertEqual({i['text'] for i in self.a.items()}, {'Mouse wheel support', 'Keyboard support'})
         self.assertEqual(len(curator.changes()), 3)
 
     def test_conflict_and_foreign_tasks_are_preserved_while_distinct_work_is_added(self):
         native = Store(self.path, 'b');self.addCleanup(native.close)
         native.add('task', 'Other session work')
         self.a.import_md('- [ ] Contested')
-        other = next(i for i in self.a.items() if i['origin'] == 'task')
         contested = next(i for i in self.a.items() if i['origin'] == 'import')
-        curator = self.curator(lambda _: decisions(done=[{'id': other['id'], 'evidence': 'Finished'},
-                    {'id': contested['id'], 'evidence': 'Finished'}], conflicts=[contested['id']],
+        curator = self.curator(lambda _: decisions(done=[{'id': contested['id'], 'evidence': 'Finished'}], conflicts=[contested['id']],
                     add=[{'scope': 'project', 'text': 'Different task', 'evidence': 'Different task'}]))
         curator.review('Finished. Different task remains.', '', 'e1')
-        self.assertEqual({i['text'] for i in self.b.items()}, {'Other session work', 'Contested', 'Different task'})
+        self.assertEqual({i['text'] for i in self.a.items()}, {'Contested', 'Different task'})
 
     def test_semantic_duplicate_is_archived_but_distinct_item_remains(self):
         self.a.import_md('- [ ] Mouse support\n- [ ] Enable mouse interaction\n- [ ] Keyboard navigation')
         keep, duplicate, different = self.a.items()
         curator = self.curator(lambda _: decisions(duplicate=[{'id': duplicate['id'], 'keep': keep['id']}]))
         curator.refresh();curator.refresh()
-        self.assertEqual({i['id'] for i in self.b.items()}, {keep['id'], different['id']})
+        self.assertEqual({i['id'] for i in self.a.items()}, {keep['id'], different['id']})
         self.assertEqual(curator.changes()[0]['action'], 'duplicate')
 
     def test_no_model_calls_without_new_event_or_list_change(self):
@@ -70,7 +68,7 @@ class CurationTests(unittest.TestCase):
         from left_undone.curation import StaleReview
         self.a.import_md('- [ ] Existing');item = self.a.items()[0]
         def racing(_):
-            self.b.done([item['id']])
+            self.a.done([item['id']])
             return decisions(update=[{'id': item['id'], 'text': 'Rewritten', 'evidence': 'Rewritten'}])
         curator = self.curator(racing)
         with self.assertRaises(StaleReview):curator.review('Rewritten', '', 'race')
@@ -94,14 +92,14 @@ class CurationTests(unittest.TestCase):
         store.commit_line({}, [{'id': 'empty', 'kind': 'snapshot', 'tasks': []}], {})
         self.assertEqual(store.items()[0]['text'], 'Keep')
 
-    def test_other_promises_are_readonly_context_and_new_session_promises_stay_private(self):
+    def test_other_promises_are_excluded_from_model_context(self):
         native = Store(self.path, 'b');self.addCleanup(native.close);native.add('promise', 'Private B')
         seen = []
         def analyze(context):
             seen.extend(context['items'])
             return decisions(add=[{'scope': 'session', 'text': 'Private A', 'evidence': 'Private A'}])
         self.curator(analyze).review('Private A next.', '', 'promise')
-        self.assertFalse(next(i['writable'] for i in seen if i['text'] == 'Private B'))
+        self.assertEqual(seen, [])
         self.assertEqual([i['text'] for i in self.b.items()], ['Private B'])
         self.assertEqual([i['text'] for i in self.a.items()], ['Private A'])
 
@@ -126,7 +124,7 @@ class CurationTests(unittest.TestCase):
         self.assertIn('Keep mouse working', calls[0]['request'])
         curator.analyze = lambda context: decisions(add=[{'text': 'Keyboard support', 'scope': 'project', 'evidence': 'Keyboard support is next.'}])
         collector.poll();collector.poll();curator.refresh()
-        self.assertEqual([i['text'] for i in self.b.items()], ['Keyboard support'])
+        self.assertEqual([i['text'] for i in self.a.items()], ['Keyboard support'])
         self.assertNotIn('request', store.cursor())
 
     def test_claude_tool_result_does_not_replace_user_request(self):
@@ -165,20 +163,21 @@ class CurationTests(unittest.TestCase):
         shared = self.a.items()[0]
         foreign = native.items()[0]
         curator.analyze = lambda _: decisions(duplicate=[{'id': shared['id'], 'keep': foreign['id']}])
-        curator.review('', '', 'merge-private')
+        with self.assertRaises(ValueError):
+            curator.review('', '', 'merge-private')
         self.assertEqual(self.a.items()[0]['id'], shared['id'])
 
     def test_refresh_cache_is_per_viewer_without_idle_thrash(self):
         from left_undone.curation import Curator
         self.a.import_md('- [ ] Mouse support')
         native = Store(self.path, 'b');self.addCleanup(native.close);native.add('task', 'Enable mouse interaction')
-        target = self.a.items('import')[0]['id'];duplicate = native.items()[0]['id']
-        actions = decisions(duplicate=[{'id': duplicate, 'keep': target}]);calls = []
-        ca = self.curator(lambda _: actions)
-        cb = Curator(self.b, lambda ctx: calls.append(ctx) or actions)
+        calls = []
+        ca = self.curator(lambda _: decisions())
+        cb = Curator(self.b, lambda ctx: calls.append(ctx) or decisions())
         ca.refresh();cb.refresh()
         self.assertEqual(len(calls), 1)
-        self.assertEqual([i['text'] for i in self.b.items()], ['Mouse support'])
+        self.assertEqual([item['text'] for item in calls[0]['items']], ['Enable mouse interaction'])
+        self.assertEqual([i['text'] for i in self.a.items()], ['Mouse support'])
         cb.refresh();ca.refresh();cb.refresh();ca.refresh()
         self.assertEqual(len(calls), 1)
 
@@ -192,13 +191,13 @@ class CurationTests(unittest.TestCase):
             'payload':{'type':'task_complete','turn_id':'old','last_agent_message':'Release verification passed'}})+'\n')
         db=CuratedStore(self.path,'a');self.addCleanup(db.close)
         Collector(db,log,'codex',None,curator.review).poll()
-        self.assertEqual(self.b.items()[0]['id'],item['id'])
+        self.assertEqual(self.a.items()[0]['id'],item['id'])
 
     def test_large_checklist_is_supported_and_incomplete_review_does_not_consume_event(self):
         actions=[{'scope':'project','text':f'Task {n}','evidence':f'Task {n}'} for n in range(12)]
         curator=self.curator(lambda _:decisions(add=actions))
         curator.review('\n'.join(a['text'] for a in actions),'','large')
-        self.assertEqual(len(self.b.items()),12)
+        self.assertEqual(len(self.a.items()),12)
         curator.analyze=lambda _:decisions(complete=False)
         with self.assertRaises(ValueError):curator.review('More work','','incomplete')
         self.assertFalse(self.a.seen('incomplete'))
@@ -220,53 +219,62 @@ class CurationTests(unittest.TestCase):
             return decisions(done=[{'id':item['id'],'evidence':'Done'}])
         curator=self.curator(move)
         with self.assertRaises(StaleReview):curator.review('Done','','moved')
-        self.assertEqual(self.b.items()[0]['text'],'Keep')
+        self.assertEqual(self.a.items()[0]['text'],'Keep')
 
     def test_assistant_sample_prompts_are_not_task_evidence(self):
-        reply='Para testar, envie:\n   ```text\n   Ficou pendente criar uma tela Teste LU-1350.\n   ```\nEsperado: uma tarefa.'
+        reply='To test this, send:\n   ```text\n   The LU-1350 test screen is still pending.\n   ```\nExpected result: one task.'
         seen=[]
         def analyze(context):
             seen.append(context)
-            return decisions(add=[{'scope':'project','text':'Criar tela Teste LU-1350',
-                                   'evidence':'Ficou pendente criar uma tela Teste LU-1350.'}])
+            return decisions(add=[{'scope':'project','text':'Create the LU-1350 test screen',
+                                   'evidence':'The LU-1350 test screen is still pending.'}])
         curator=self.curator(analyze)
-        with self.assertRaises(ValueError):curator.review(reply,'Como eu testo?','example')
-        self.assertNotIn('Ficou pendente',seen[0]['reply'])
+        with self.assertRaises(ValueError):curator.review(reply,'How do I test this?','example')
+        self.assertNotIn('still pending',seen[0]['reply'])
         self.assertEqual(self.a.items(),[])
 
     def test_real_user_request_still_counts_when_assistant_quotes_it_in_a_fence(self):
-        curator=self.curator(lambda _:decisions(add=[{'scope':'project','text':'Criar tela real',
-                                                      'evidence':'Criar tela real'}]))
-        curator.review('```text\nCriar tela real\n```','Criar tela real é uma pendência aprovada.','real-request')
-        self.assertEqual(self.a.items()[0]['text'],'Criar tela real')
+        curator=self.curator(lambda _:decisions(add=[{'scope':'project','text':'Create the release screen',
+                                                      'evidence':'Create the release screen'}]))
+        curator.review('```text\nCreate the release screen\n```','Create the release screen before launch.','real-request')
+        self.assertEqual(self.a.items()[0]['text'],'Create the release screen')
 
     def test_inline_backticks_do_not_swallow_following_real_prose(self):
         from left_undone.curation import prose_evidence
-        self.assertIn('Revisar segurança',prose_evidence('```npm test``` é só exemplo.\nRevisar segurança continua pendente.'))
+        self.assertIn('Review security',prose_evidence('```npm test``` is just an example.\nReview security before release.'))
 
     def test_quoted_fenced_examples_are_also_excluded(self):
         from left_undone.curation import prose_evidence
-        result=prose_evidence('Exemplo:\n> ```text\n> Criar tela fictícia\n> ```\nSem tarefa nova.')
-        self.assertNotIn('Criar tela fictícia',result)
-        self.assertIn('Sem tarefa nova.',result)
+        result=prose_evidence('Example:\n> ```text\n> Create a sample screen\n> ```\nNo new task.')
+        self.assertNotIn('Create a sample screen',result)
+        self.assertIn('No new task.',result)
 
     def test_user_tasks_are_labeled_and_keep_label_on_rewrite(self):
         curator = self.curator(lambda _: decisions(add=[
-            {'scope': 'project', 'owner': 'user', 'text': 'Reservar o IP do NAS no roteador', 'evidence': 'Reserve the NAS IP'},
-            {'scope': 'project', 'owner': 'agent', 'text': 'Enviar os repositórios ao NAS', 'evidence': 'push the repos'}]))
+            {'scope': 'project', 'owner': 'user', 'text': 'Reserve the NAS IP on the router', 'evidence': 'Reserve the NAS IP'},
+            {'scope': 'project', 'owner': 'agent', 'text': 'Push the repos to the NAS', 'evidence': 'push the repos'}]))
         curator.review('Reserve the NAS IP on the router. I will push the repos.', '', 'e1')
-        texts = {i['text'] for i in self.b.items()}
-        self.assertEqual(texts, {'VOCÊ · Reservar o IP do NAS no roteador', 'Enviar os repositórios ao NAS'})
-        user = next(i for i in self.b.items() if i['text'].startswith('VOCÊ'))
-        curator.analyze = lambda _: decisions(update=[{'id': user['id'], 'text': 'Roteador: reservar o IP fixo do NAS',
+        texts = {i['text'] for i in self.a.items()}
+        self.assertEqual(texts, {'VOCÊ · Reserve the NAS IP on the router', 'Push the repos to the NAS'})
+        user = next(i for i in self.a.items() if i['text'].startswith('VOCÊ'))
+        curator.analyze = lambda _: decisions(update=[{'id': user['id'], 'text': 'Router: reserve a static IP for the NAS',
                                                        'evidence': 'Reserve the NAS IP'}])
         curator.review('Reserve the NAS IP still pending.', '', 'e2')
-        self.assertIn('VOCÊ · Roteador: reservar o IP fixo do NAS', {i['text'] for i in self.b.items()})
+        self.assertIn('VOCÊ · Router: reserve a static IP for the NAS', {i['text'] for i in self.a.items()})
 
     def test_model_supplied_label_is_not_doubled_and_bad_owner_is_rejected(self):
         curator = self.curator(lambda _: decisions(add=[
-            {'scope': 'project', 'owner': 'user', 'text': 'VOCÊ · Testar SMB', 'evidence': 'Test SMB'}]))
+            {'scope': 'project', 'owner': 'user', 'text': 'VOCÊ · Test SMB', 'evidence': 'Test SMB'}]))
         curator.review('Test SMB on the laptop.', '', 'e1')
-        self.assertEqual([i['text'] for i in self.b.items()], ['VOCÊ · Testar SMB'])
+        self.assertEqual([i['text'] for i in self.a.items()], ['VOCÊ · Test SMB'])
         curator.analyze = lambda _: decisions(add=[{'scope': 'project', 'owner': 'boss', 'text': 'X', 'evidence': 'Test SMB'}])
         with self.assertRaises(ValueError):curator.review('Test SMB again.', '', 'e2')
+
+    def test_legacy_reviews_about_other_sessions_items_stay_out_of_change_history(self):
+        self.b.add('task', 'Other session task')
+        foreign = self.b.items()[0]
+        curator = self.curator(lambda _: decisions())
+        with self.a.conn:
+            self.a.conn.execute("INSERT INTO curation_changes(project,session,action,item,after_text) "
+                                "VALUES(?,?,'update',?,?)", ('project', 'a', foreign['id'], foreign['text']))
+        self.assertEqual(curator.changes(), [])

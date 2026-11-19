@@ -1,15 +1,9 @@
-# Coletar agora
+# Collect now
 
-Comportamento aprovado: botão no painel solicita coleta imediata da conversa
-vinculada, com andamento/erro visível; coleta automática permanece ativa.
+The approved panel button requests immediate collection from the linked conversation and displays progress or errors. Automatic collection stays active.
 
-## Abordagem
+## Approach
 
-Reutilizar o coletor único e seu bloqueio, solicitando uma rodada via arquivo
-local por vínculo. Evita iniciar um segundo processo ou usar sinais antes da
-inicialização. O atalho 5 compartilha a ação do clique. Pedidos repetidos são
-agrupados; pedidos durante análise aguardam a rodada atual. O pedido interrompe
-a espera normal ou de erro, sem ignorar a validação da identidade. A leitura
-permanece incremental, sem reanalisar respostas processadas ou alterar modelos.
+Reuse the single collector and its lock. A local request file for each binding triggers a pass, avoiding a second process or signals sent before startup. Key 5 triggers the same action as a click. Repeated requests coalesce. Requests during analysis wait for the current pass to finish. A request interrupts normal or error backoff, and identity validation still runs. Reads remain incremental, with the same models and no reanalysis of processed replies.
 
-Não muda envio, seleção, conclusão, associação de projetos ou UUID.
+Sending, selection, completion, project association and UUID handling stay the same.

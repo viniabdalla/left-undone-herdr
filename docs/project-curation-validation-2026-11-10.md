@@ -1,34 +1,19 @@
-# Validação da curadoria automática
+# Automatic curation validation
 
-Implementação aprovada para aplicar automaticamente novidades e atualizações,
-preservando conflitos e evitando duplicatas. Nenhuma tarefa é executada pelo
-curador. Compartilhamento de projeto e promessas privadas continuam intactos.
+The approved implementation automatically applies new items and updates while preserving conflicts and avoiding duplicates. The curator edits the list without executing work. Project sharing and private promises retain their existing behavior.
 
-Verificação local: 86 testes aprovados, compileall e diff --check limpos.
-Testes cobrem evidência, alterações de projeto, conclusão/importação concorrente,
-ABA, repetição de evento, falha do modelo sem perda do cursor, histórico antigo,
-revisão incompleta, checklists maiores, cache por sessão sem polling ocioso,
-promessas alheias invisíveis e proteção de tarefas de outra sessão.
+86 local tests passed, along with compileall and diff --check. Coverage included evidence, project changes, concurrent completion/import, ABA, repeated events, model failure without cursor loss, old history, incomplete review, larger checklists, per-session caching without idle polling, hidden foreign promises and protection for other sessions' tasks.
 
-Modelo real Codex gpt-6-luna/low, com dados sintéticos em SQLite isolado:
-- consolidou “Implementar interação com mouse” em “Adicionar suporte ao mouse”;
-- concluiu navegação por teclado com a evidência literal apresentada;
-- acrescentou exportação CSV como tarefa de projeto, visível na segunda sessão;
-- preservou decisão SQLite em conflito e trabalho de parser da outra sessão;
-- repetição sem novidade não chamou o modelo novamente.
+Live Codex gpt-6-luna/low with synthetic data in an isolated SQLite database:
 
-Revisão independente encontrou quatro problemas, todos corrigidos e cobertos:
-promessas privadas alheias escondendo trabalho visível; cache global impedindo
-revisão pelo dono; conclusões históricas atingindo tarefas novas; orçamento antigo
-de cinco adições insuficiente para checklists. Teste de consumo da skill confirmou
-instruções de segunda sessão, conclusão automática de importados e limites de envio.
+- Merged “Implementar interação com mouse” (“Implement mouse interaction”) into “Adicionar suporte ao mouse” (“Add mouse support”).
+- Completed keyboard navigation using the supplied verbatim evidence.
+- Added CSV export as a project task visible in the second session.
+- Preserved a conflicting SQLite decision and the other session's parser work.
+- Received no further model call on a repeat with no new information.
 
-Backup consistente precede ativação no painel real. Evidências brutas e dados
-temporários permanecem fora do Git. A falha de destinatário obsoleto após /new e
-/resume continua separada; este trabalho não a declara resolvida.
+Independent review found four issues, all fixed and covered by tests. Other sessions' private promises could hide visible work, a global cache could block the owner's review, historical completions could affect new tasks, and the five-addition budget was too small for checklists. A skill-consumption test confirmed second-session instructions, automatic completion of imported tasks and delivery limits.
 
-Limites explícitos: últimos 12 mil caracteres da resposta e 4 mil dos pedidos;
-500 itens de contexto e 50 ações por categoria. Resposta declarada incompleta
-não consome o evento. A deduplicação semântica depende do julgamento do modelo;
-histórico preserva as alterações, enquanto as verificações determinísticas
-protegem propriedade, versões, datas, evidência textual e baixas manuais.
+A consistent backup precedes activation in the live panel. Raw evidence and temporary data stay outside Git. The stale recipient after /new and /resume remains a separate issue.
+
+Limits are the last 12,000 characters of the response and 4,000 of requests, 500 context items and 50 actions per category. A response flagged incomplete leaves the event unconsumed. Semantic deduplication depends on model judgment. History records changes and deterministic checks protect ownership, versions, dates, textual evidence and manual closures.

@@ -1,39 +1,26 @@
-# Distribuição por SSH — 2026-11-10
+# SSH deployment — 2026-11-10
 
-Repositório privado: https://github.com/viniabdalla/left-undone-herdr
+Private repository: https://github.com/viniabdalla/left-undone-herdr
 
-| Máquina | Resultado |
+| Machine | Result |
 |---|---|
-| tropico-2 | Origem de desenvolvimento, Git main publicado |
-| omarchy2 | Instalação antiga convertida em checkout Git, preservando cópia anterior e evidências locais |
-| Omarchy novo | Clone novo, plugin/skills/comando instalados |
+| tropico-2 | Development machine, main branch published |
+| omarchy2 | Converted the old installation to a Git checkout and preserved the previous copy and local evidence |
+| New Omarchy | Created a fresh clone and installed the plugin, skills and command |
 
-Tropico-1 excluída do escopo a pedido do usuário; nenhuma instalação pendente ali.
+The user excluded tropico-1. No installation was pending there.
 
-Nas duas máquinas remotas: projeto em `~/Projects/left-undone-herdr`, comando em
-`~/.local/bin/left-undone`, skills ligadas para Codex e Claude. Herdr 0.9.1,
-integração Codex v8, integração Claude atualizada para v10. 53 testes passaram
-em cada máquina. GitHub privado acessível diretamente via Git em ambas.
+Both remote machines had the project at `~/Projects/left-undone-herdr`, the command at `~/.local/bin/left-undone` and skills linked for Codex and Claude. Both ran Herdr 0.9.1 with Codex integration v8 and Claude integration updated to v10. All 53 tests passed on each machine. Both could access the private GitHub repository directly with Git.
 
-Código validado no commit `1378776`; atualização posterior do TODO e deste
-relatório não altera runtime. As três máquinas acompanham `origin/main`.
-Registros locais de instalação/testes em `~/.local/state/left-undone-deploy/`.
-Backup da instalação antiga do omarchy2:
-`~/Projects/left-undone-herdr.backup-20261110-111638`.
+The validated code was commit `1378776`. Later TODO and report updates did not affect runtime. All three machines tracked `origin/main`. Local installation and test records were in `~/.local/state/left-undone-deploy/`. The old omarchy2 installation was backed up to `~/Projects/left-undone-herdr.backup-20261110-111638`.
 
-`left-undone --help` e resolução do comando em shell interativo conferidos.
-Codex 0.167.0 disponível nas duas máquinas. Claude 2.1.322 disponível; no
-Omarchy novo, launcher sem conta explícita excedeu 15 segundos, enquanto shim
-direto e launcher com CLAUDE_CONFIG_DIR responderam normalmente. O analisador
-do Left Undone já fixa a conta verificada por essa variável.
+Checks covered `left-undone --help` and command resolution in an interactive shell. Both machines had Codex 0.167.0 and Claude 2.1.322. On the new Omarchy, launching without an explicit account exceeded 15 seconds. The direct shim and the launcher with CLAUDE_CONFIG_DIR responded normally. The Left Undone analyzer already selects its verified account through that variable.
 
-Não foi refeito ciclo completo com LLM nas máquinas remotas nesta distribuição.
-A falha conhecida de UUID antigo na troca Codex continua documentada e pendente.
-Servidores e conversas existentes não foram reiniciados.
+This rollout did not repeat a full model cycle on the remote machines. The known stale UUID on Codex session switches remained open. Existing servers and conversations continued running.
 
-## Atualizações seguintes
+## Subsequent updates
 
-Com checkout limpo:
+From a clean checkout:
 
 ```sh
 cd ~/Projects/left-undone-herdr
@@ -41,13 +28,8 @@ git pull --ff-only
 python3 install.py
 ```
 
-Feche e reabra painéis existentes para carregar a nova implementação. As listas
-são locais e ficam fora do checkout; atualizar código não sincroniza listas.
+Close and reopen existing panels to load the update. Lists are local and outside the checkout. Updating code does not synchronize them.
 
 ### 2026-11-11
 
-tropico-2, omarchy2 e Omarchy novo atualizados para `70b61a3` com
-`git pull --ff-only` e `python3 install.py`. Suíte passou nas três (no Omarchy
-novo, 1 teste pulado pelo ambiente). Painéis abertos precisam ser fechados e
-reabertos para carregar a nova versão. A correção do Codex após /new e /resume
-segue só no branch `fix/codex-active-thread`, fora das instalações.
+tropico-2, omarchy2 and the new Omarchy updated to `70b61a3` with `git pull --ff-only` and `python3 install.py`. The suite passed on all three, with one environment-related skip on the new Omarchy. Open panels require closing and reopening to load the version. The Codex fix after /new and /resume remained only on `fix/codex-active-thread`, outside the installations.

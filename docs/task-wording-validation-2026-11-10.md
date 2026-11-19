@@ -1,28 +1,16 @@
-# Validação da linguagem das pendências — 2026-11-10
+# Task wording validation — 2026-11-10
 
-Alterados apenas os prompts de promessas e curadoria, usados por Codex e Claude.
-Formato aprovado: termo técnico junto de uma tarefa curta em linguagem simples.
+Only the promise and curation prompts shared by Codex and Claude changed. The approved format keeps the technical term alongside a short task in plain language.
 
-Teste com o consumidor real `Analyzer`, Codex gpt-6-luna / low e conta vinculada
-à conversa. Nenhuma resposta de teste foi importada para o estado do projeto.
-A primeira instrução genérica ainda produziu “corrigir UUID obsoleto” e “enviar
-de forma atômica”; foi reforçada para separar rótulo técnico e ação simples.
+The test used the real `Analyzer`, Codex gpt-6-luna / low and the account bound to the conversation. Test responses stayed outside project state. The first generic instruction still produced “corrigir UUID obsoleto” (“fix stale UUID”) and “enviar de forma atômica” (“send atomically”). The revision explicitly separated the technical label and the plain-language action.
 
-Respostas após o ajuste, validadas pelos esquemas existentes:
+The existing schemas validated these results after the adjustment. The Portuguese output is quoted verbatim alongside its English meaning:
 
-- Promessas: “Codex /resume / UUID: reconhecer a conversa certa ao retomar.”
-- Curadoria: “API Herdr / envio atômico por UUID: garantir o envio à conversa
-  certa mesmo se ela mudar durante o envio.”
-- Termos não presentes nos exemplos do prompt: “Debounce do botão: impedir que
-  cliques repetidos iniciem várias coletas.” e “Cache por sessão: evitar analisar
-  o mesmo texto mais de uma vez.”
-- Pergunta/explicação sobre API, sem trabalho solicitado: nenhuma ação de curadoria.
+- Promises: “Codex /resume / UUID: reconhecer a conversa certa ao retomar.” (“Codex /resume / UUID: recognize the right conversation when resuming.”)
+- Curation: “API Herdr / envio atômico por UUID: garantir o envio à conversa certa mesmo se ela mudar durante o envio.” (“Herdr API / atomic delivery by UUID: send to the right conversation even if it changes during delivery.”)
+- Terms absent from the prompt examples: “Debounce do botão: impedir que cliques repetidos iniciem várias coletas.” (“Button debounce: prevent repeated clicks from starting several collections.”) and “Cache por sessão: evitar analisar o mesmo texto mais de uma vez.” (“Per-session cache: avoid analyzing the same text more than once.”)
+- A question and explanation about an API with no requested work produced no curation action.
 
-96 testes existentes passaram. `compileall` e `git diff --check` sem erros.
-Revisão independente dos prompts sem achados. Não foram criados testes que
-apenas verificam strings das instruções. Claude não foi chamado neste teste;
-usa os mesmos prompts, mas sua qualidade de redação não foi avaliada ao vivo.
+96 existing tests, `compileall` and `git diff --check` passed. Independent prompt review found no issues. No tests were added solely to check instruction strings. Claude shares the prompts, but this test did not assess its wording live.
 
-Painel desta conversa recarregado para aplicar os novos prompts. Pendência
-correspondente concluída pelo ID exato, preservando os três itens anteriores.
-Nenhuma migração de estilo foi feita em itens antigos ou tarefas nativas.
+The panel for this conversation was reloaded to apply the prompts. The corresponding item was completed by exact ID, preserving the three previous items. Older and native tasks retained their wording.

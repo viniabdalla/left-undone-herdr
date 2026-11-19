@@ -1,47 +1,21 @@
-# Left Undone — implementação do plano aprovado
+# Left Undone — implementation of the approved plan
 
-Plano: plugin Herdr + skill; Python/curses/SQLite; tarefas e promessas por sessão;
-Claude Haiku e Codex gpt-6-luna low; painel direito; letras/1/2/3/4;
-coleta incremental, envio com vínculo validado, importação aditiva, testes reais.
+The plan paired a Herdr plugin and skill with Python, curses and SQLite. It called for per-session tasks and promises, Claude Haiku and Codex gpt-6-luna low, a right-hand panel, letters and keys 1/2/3/4, incremental collection, sending through a verified binding, additive import and live tests.
 
-1. Estado e adaptadores; 2. Analisadores; 3. Vínculo/Herdr e painel;
-4. Empacotamento/skill; 5. Testes e revisão.
+1. State and adapters.
+2. Analyzers.
+3. Herdr binding and panel.
+4. Packaging and skill.
+5. Tests and review.
 
-Decisão: projeto novo e vazio, implementação diretamente na nova pasta
-left-undone-herdr, com symlink no nome antigo para preservar a sessão ativa.
-Não existe repositório base ou worktree a isolar.
-Decisão: sem sessão identificada pelo Herdr, envio será recusado; contexto
-herdado/foco não é suficiente. Processo Linux confirma conta, não destinatário.
-Tarefa operacional: 9a097abf-870c-465a-b6ab-97f406c1b100.
+The project started empty. Implementation went directly into the new left-undone-herdr directory, with a symlink under the old name to preserve the active session. There was no base repository or worktree to isolate. Sending requires a Herdr-identified session. Inherited context and focus are insufficient. The Linux process verifies the account only. Operational task: 9a097abf-870c-465a-b6ab-97f406c1b100.
 
-Implementados: estado/adaptadores; analisadores; vínculo; curses; manifesto;
-skill compartilhada Codex/Claude; instalador local sem sobrescrever conflitos.
-14 testes passaram inicialmente. Codex Luna real retornou done=[1,2],
-add=[Add retry tests.]; Claude real retornou API 429 usage_limit_reached.
-Decisão: históricos Claude podem ser compartilhados por symlink entre contas;
-a conta é sempre a do processo verificado, não é inferida do caminho do log.
+Implemented state, adapters, analyzers, binding, curses UI, manifest, shared Codex/Claude skill and a local installer that preserves conflicting files. Initially 14 tests passed. Live Codex Luna returned done=[1,2], add=[Add retry tests.]. Live Claude returned API 429 usage_limit_reached. Claude histories can be symlinked across accounts, so account identity always comes from the verified process.
 
-Revisão independente (gpt-6-astra) identificou quatro falhas importantes:
-coletor órfão após SIGTERM/SIGHUP, vínculo antigo após retomar mesmo UUID,
-PID persistido frágil na deduplicação e baixa nativa impedindo reabertura.
-Os quatro testes de regressão falharam antes das correções; suíte posterior:
-20 testes passaram, inclusive encerramento real por sinal com PTY.
-Correções: cleanup por sinal, comparação integral do vínculo, dedup pelo
-processo foreground/ambiente do painel com janela de startup, e tombstone
-manual distinto de conclusão nativa.
+Independent review by gpt-6-astra identified four failures: an orphan collector after SIGTERM/SIGHUP, a stale binding after resuming the same UUID, unreliable deduplication by persisted PID, and native completion blocking reopening. All four regression tests failed before their fixes. Afterward 20 tests passed, including real signal termination in a PTY. Fixes added signal cleanup, full binding comparison, deduplication using the panel's foreground process and environment with a startup window, and distinct manual tombstones and native completion.
 
-Codex ao vivo: sessão descartável detectou promessa de poema; letra a e 1
-no painel enviaram exclusivamente ao agente lu-demo. Agente respondeu poema;
-analisador removeu promessa ao cumprir (0 pendências). Reabertura testada.
-Foco continuou no pane original. Nenhum servidor reiniciado.
-Decisão: API Herdr 0.9.1 não oferece compare-and-send atômico por UUID;
-implementada verificação imediata de sessão, terminal, PID foreground,
-starttime, conta e histórico. Resta janela TOCTOU nativa documentada.
+A disposable live Codex session detected a promise to write a poem. Pressing a and 1 in the panel sent it exclusively to lu-demo. The agent replied with the poem and the analyzer removed the fulfilled promise, leaving zero open items. Reopening passed. Focus stayed in the original pane and no server restarted. Herdr 0.9.1 lacks atomic compare-and-send by UUID. The implementation checks session, terminal, foreground PID, starttime, account and history immediately before sending. A documented native TOCTOU window remains.
 
-Verificação final ampliada: 21 testes passaram; proteção adicional evita
-herdar credenciais API de outra conta do processo chamador. A skill passou
-quick_validate e os módulos compilaram. Fechamento externo real encerrou
-coletor; duas aberturas concorrentes criaram um único painel. Panes de demo
-encerrados. Validação Claude ao vivo continua parcial por cota da conta.
+Extended verification passed 21 tests. An additional guard prevents inheriting API credentials from another account in the calling process. The skill passed quick_validate and the modules compiled. Closing the panel externally stopped its collector. Two concurrent opens produced one panel. The demo panes were closed. Live Claude validation was initially partial due to account quota.
 
-2026-11-10 tropico-2: ciclo Claude ao vivo concluído com Haiku; promessa detectada, enviada pela UI, cumprida e removida automaticamente (dismissed=0). Evidências em docs/verification.md.
+On 2026-11-10, tropico-2 completed the live Claude cycle with Haiku. The promise was detected, sent through the UI, fulfilled and automatically removed (dismissed=0). Evidence is in docs/verification.md.

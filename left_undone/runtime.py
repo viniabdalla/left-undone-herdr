@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from .language import tr
 from .core import validate_audit
 
 PLUGIN='left-undone'
@@ -21,13 +22,13 @@ the action in plain words, not the mechanism. Do not just copy the technical
 sentence or repeat its jargon after the colon. Avoid jargon such as obsolete UUID,
 atomic sending, harness or enqueue in the plain-language action. Preserve distinct
 requirements and the user's language; never invent technical terms or extra work.
-Wording examples in Portuguese (illustrations only, never tasks to add):
-"Corrigir UUID obsoleto após /resume no Codex" becomes
-"Codex /resume / UUID: reconhecer a conversa certa ao retomar."
-"Implementar envio atômico por UUID na API Herdr" becomes
-"API Herdr / envio atômico por UUID: garantir o envio à conversa certa mesmo se ela mudar durante o envio."
-"Enfileirar no harness com agente ocupado" becomes
-"Fila do harness: perguntar se o pedido deve esperar o agente terminar."
+Wording examples (illustrations only, never tasks to add):
+"Fix stale session UUID after /resume" becomes
+"Codex /resume / UUID: recognize the correct conversation when resuming."
+"Implement atomic sending by UUID" becomes
+"Herdr API / atomic UUID delivery: send to the intended conversation even if it changes during delivery."
+"Enqueue in the harness while the agent is busy" becomes
+"Agent queue: ask whether the request should wait until the agent finishes."
 Without a useful technical term, simply write the short everyday task; do not
 invent a label. No full explanations. This changes only wording, not which
 promises qualify or are done.
@@ -58,7 +59,7 @@ class Binding:
 def raw_herdr(*args,env=None):
     context=os.environ if env is None else env
     p=subprocess.run([context.get('HERDR_BIN_PATH','herdr'),*args],capture_output=True,text=True,timeout=20,env=env)
-    if p.returncode:raise RuntimeError(p.stderr.strip()[:700] or 'Falha no Herdr')
+    if p.returncode:raise RuntimeError(p.stderr.strip()[:700] or tr('Herdr command failed'))
     value=json.loads(p.stdout)
     if 'error' in value:raise RuntimeError(str(value['error']))
     return value['result']
@@ -71,7 +72,7 @@ def process_environment(pid):
 def restore_context():
     """Recover daemon context from an exact native session, never focus/cwd."""
     session=os.environ.get('CODEX_THREAD_ID')
-    if not session:raise RuntimeError('Contexto Herdr ausente; execute no Herdr ou informe a conversa por integração nativa')
+    if not session:raise RuntimeError(tr('Herdr context missing. Run inside Herdr or identify the conversation using the native integration.'))
     keys=('HERDR_ENV','HERDR_PANE_ID','HERDR_TAB_ID','HERDR_WORKSPACE_ID','HERDR_SOCKET_PATH','HERDR_BIN_PATH')
     matches=[]
     for proc in processes():
@@ -90,7 +91,7 @@ def restore_context():
             if proc['pid'] not in [p['pid'] for p in foreground]:continue
             matches.append(context)
         except (OSError,ValueError,RuntimeError,subprocess.TimeoutExpired):continue
-    if len(matches)!=1:raise RuntimeError('UUID/processo atual ausente ou ambíguo no Herdr; confira a integração nativa Codex')
+    if len(matches)!=1:raise RuntimeError(tr('Current session UUID or process is missing or ambiguous. Check the native Codex integration.'))
     for key in list(os.environ):
         if key.startswith('HERDR_'):del os.environ[key]
     os.environ.update({key:matches[0][key] for key in keys if key in matches[0]})
@@ -124,7 +125,7 @@ def processes():
 
 
 def resolve_history(kind, account, session):
-    if not session or '/' in session or '..' in session:raise RuntimeError('ID de sessão inválido')
+    if not session or '/' in session or '..' in session:raise RuntimeError(tr('Invalid session ID'))
     root=(Path(account)/('sessions' if kind=='codex' else 'projects')).resolve()
     pattern='**/rollout-*'+session+'.jsonl' if kind=='codex' else '*/'+session+'.jsonl'
     paths=set()
@@ -140,7 +141,7 @@ def resolve_history(kind, account, session):
                     sid=row.get('payload',{}).get('id') if row.get('type')=='session_meta' else row.get('sessionId')
                     if sid==session:paths.add(p);break
         except (OSError,ValueError):continue
-    if len(paths)!=1:raise RuntimeError('Histórico ausente ou ambíguo nesta conta')
+    if len(paths)!=1:raise RuntimeError(tr('Session history is missing or ambiguous for this account'))
     return paths.pop()
 
 
@@ -150,10 +151,10 @@ def candidates(*,titles=None):
         if a.get('agent') not in ('codex','claude'):continue
         sid=(a.get('agent_session') or {}).get('value')
         if not sid or a['agent_session'].get('kind')!='id':
-            errors.append(a['pane_id']+': sessão ainda não identificada pelo Herdr');continue
+            errors.append(a['pane_id']+tr(': session not yet identified by Herdr'));continue
         matches=[p for p in procs if p['pane']==a['pane_id'] and p['kind']==a['agent']]
         if len(matches)!=1:
-            errors.append(a['pane_id']+': processo/conta ambíguos');continue
+            errors.append(a['pane_id']+tr(': ambiguous process or account'));continue
         p=matches[0]
         try:history=resolve_history(a['agent'],p['account'],sid)
         except RuntimeError as e:errors.append(a['pane_id']+': '+str(e));continue
@@ -167,7 +168,7 @@ def verify_live(binding, live):
     sid=live.get('agent_session') or {}
     if (live.get('pane_id')!=binding.pane or live.get('terminal_id')!=binding.terminal or
         live.get('agent')!=binding.kind or sid.get('kind')!='id' or sid.get('value')!=binding.session):
-        raise RuntimeError('Vínculo mudou ou sessão desconhecida. Reabra e selecione a conversa.')
+        raise RuntimeError(tr('Link changed or session unknown. Reopen and select the conversation.'))
 
 
 class AgentBusy(RuntimeError):
@@ -176,7 +177,7 @@ class AgentBusy(RuntimeError):
 
 class QueueOffer(RuntimeError):
     def __init__(self,chosen):
-        super().__init__('O agente está trabalhando. Deseja colocar o pedido na fila?')
+        super().__init__(tr('The agent is working. Queue the request?'))
         self.items=tuple((item['id'],item['text']) for item in chosen)
         self.text='\n'.join('You left this undone: '+text for _,text in self.items)
 
@@ -186,15 +187,15 @@ def verify(binding, ready=False):
     verify_live(binding,live)
     foreground=herdr('pane','process-info','--pane',binding.pane)['process_info']['foreground_processes']
     if binding.pid not in [p['pid'] for p in foreground]:
-        raise RuntimeError('O processo verificado não ocupa mais o pane')
+        raise RuntimeError(tr('The verified process no longer occupies the pane'))
     p=process_info(binding.pid)
     if not p or any(p[k]!=v for k,v in [('started',binding.started),('kind',binding.kind),('pane',binding.pane),('account',binding.account)]):
-        raise RuntimeError('Processo ou conta mudou. Reabra o painel.')
+        raise RuntimeError(tr('Process or account changed. Reopen the panel.'))
     if resolve_history(binding.kind,binding.account,binding.session)!=Path(binding.history):
-        raise RuntimeError('Histórico da sessão mudou')
+        raise RuntimeError(tr('Session history changed'))
     if ready and live.get('agent_status') not in ('idle','done'):
-        if live.get('agent_status')=='working':raise AgentBusy('O agente está trabalhando')
-        raise RuntimeError('Aguarde o agente ficar livre; envio não realizado')
+        if live.get('agent_status')=='working':raise AgentBusy(tr('Agent is working'))
+        raise RuntimeError(tr('Wait for the agent to finish. Nothing was sent.'))
     return live
 
 
@@ -221,7 +222,7 @@ def queue_selected(store,offer,submit):
         current={item['id']:item for item in store.items()}
         if any(item_id not in current or not current[item_id]['selected'] or
                current[item_id]['text']!=text for item_id,text in offer.items):
-            raise RuntimeError('A seleção mudou. Revise os itens e tente enviar novamente.')
+            raise RuntimeError(tr('Selection has changed. Review the items and try sending again.'))
         submit(offer.text)
         store.clear_selection([item_id for item_id,_ in offer.items])
     return len(offer.items)
@@ -229,10 +230,10 @@ def queue_selected(store,offer,submit):
 
 def queue(binding,text):
     if binding.kind!='codex':
-        raise RuntimeError('A fila do Claude não está disponível nesta versão. Aguarde o agente terminar.')
+        raise RuntimeError(tr('Claude queuing is unavailable in this version. Wait for the agent to finish.'))
     live=verify(binding)
     if live.get('agent_status') not in ('working','idle','done'):
-        raise RuntimeError('O agente não está pronto para receber pedidos; fila não enviada.')
+        raise RuntimeError(tr('The agent is not ready to receive requests; queue not sent.'))
     env={k:v for k,v in os.environ.items() if not k.startswith(
         ('HERDR_','CODEX_','AI_MEMORY_','OPENAI_','ANTHROPIC_','CLAUDE_CODE_'))}
     env['CODEX_HOME']=binding.account
@@ -243,10 +244,10 @@ def queue(binding,text):
             result=subprocess.run(['codex','queue','--thread',binding.session,'--message',text],
                 cwd=folder,env=env,capture_output=True,text=True,timeout=20)
     except (OSError,subprocess.TimeoutExpired) as error:
-        raise RuntimeError('Fila não confirmada. Confira a fila do Codex antes de repetir o envio.') from error
+        raise RuntimeError(tr('Queue submission unconfirmed. Check the Codex queue before retrying.')) from error
     receipt=re.search(r'^Queued message ([0-9a-f-]{36}) for thread ([0-9a-f-]{36})\.$',result.stdout,re.M)
     if result.returncode or not receipt or receipt.group(2)!=binding.session:
-        raise RuntimeError('Fila não confirmada. Confira a fila do Codex antes de repetir o envio.')
+        raise RuntimeError(tr('Queue submission unconfirmed. Check the Codex queue before retrying.'))
     return receipt.group(1)
 
 
@@ -254,7 +255,7 @@ class Analyzer:
     def __init__(self,binding,timeout=90,rules=RULES,schema=SCHEMA,effort='low'):
         self.binding=binding;self.timeout=timeout;self.rules=rules;self.schema=schema;self.effort=effort
 
-    def command(self,cwd,schema,answer):
+    def command(self,cwd,schema,answer,output_schema=None):
         env={k:v for k,v in os.environ.items() if not k.startswith(('HERDR_','CLAUDE_CODE_','CODEX_','AI_MEMORY_','OPENAI_','ANTHROPIC_')) and k!='CLAUDECODE'}
         env['LEFT_UNDONE_ANALYZER']='1'
         # Keep OAuth auth in the verified account, without importing project context.
@@ -270,17 +271,17 @@ class Analyzer:
             argv=['claude','-p','--model','haiku','--effort',self.effort,'--no-session-persistence','--tools','',
                   '--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--setting-sources','',
                   '--settings','{"disableAllHooks":true}','--system-prompt',self.rules,
-                  '--output-format','json','--json-schema',json.dumps(self.schema)]
+                  '--output-format','json','--json-schema',json.dumps(self.schema if output_schema is None else output_schema)]
         return argv,env
 
     def __call__(self,reply,opened):
         return validate_audit(self.request({'open_promises':opened,'reply':reply[-12000:]}),opened)
 
-    def request(self,payload):
+    def request(self,payload,*,output_schema=None):
         with tempfile.TemporaryDirectory(prefix='left-undone-analyzer-') as folder:
             root=Path(folder);schema=root/'schema.json';answer=root/'answer.json'
-            schema.write_text(json.dumps(self.schema))
-            argv,env=self.command(root,schema,answer)
+            schema.write_text(json.dumps(self.schema if output_schema is None else output_schema))
+            argv,env=self.command(root,schema,answer) if output_schema is None else self.command(root,schema,answer,output_schema)
             p=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                                text=True,cwd=root,env=env,start_new_session=True)
             try:
@@ -290,13 +291,13 @@ class Analyzer:
                 try:p.communicate(timeout=3)
                 except subprocess.TimeoutExpired:os.killpg(p.pid,signal.SIGKILL);p.communicate()
                 raise
-            if p.returncode:raise RuntimeError(f'{self.binding.kind}: analisador indisponível (código {p.returncode}); verifique login/limite no CLI')
+            if p.returncode:raise RuntimeError(tr('{0}: analyzer unavailable (exit code {1}). Check CLI sign-in and usage limits.').format(self.binding.kind, p.returncode))
             if self.binding.kind=='codex':
-                if not answer.exists():raise RuntimeError('Codex não retornou resposta estruturada')
+                if not answer.exists():raise RuntimeError(tr('Codex did not return structured response'))
                 value=json.loads(answer.read_text())
             else:
                 response=json.loads(stdout)
-                if response.get('is_error'):raise RuntimeError('Claude: falha de autenticação/limite/modelo')
+                if response.get('is_error'):raise RuntimeError(tr('Claude: authentication/limit/model failure'))
                 value=response.get('structured_output')
                 if value is None:value=json.loads(response.get('result',''))
             return value

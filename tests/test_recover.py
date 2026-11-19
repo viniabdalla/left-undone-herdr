@@ -17,7 +17,7 @@ class RecoveryTests(unittest.TestCase):
         result = subprocess.run([sys.executable, 'left-undone', 'recover', '--marker', 'bad'],
                                 capture_output=True, text=True)
         self.assertNotIn('invalid choice', result.stderr)
-        self.assertIn('marca', result.stderr.lower())
+        self.assertIn('marker', result.stderr.lower())
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -98,7 +98,7 @@ class RecoveryTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError):self.recover(**kwargs)
 
     def test_visible_marker_survives_terminal_line_wrapping(self):
-        text='Verificação: LU-\n  '+self.marker[3:19]+'\n    '+self.marker[19:]
+        text='Verification: LU-\n  '+self.marker[3:19]+'\n    '+self.marker[19:]
         self.assertEqual(self.recover(visible=text).session,self.session)
 
     def test_recent_commentary_can_reach_transcript_after_first_read(self):
@@ -109,5 +109,5 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):self.recover(visible=self.marker[:-1]+'d')
 
     def test_ambiguous_match_does_not_wait_for_one_candidate_to_disappear(self):
-        def must_not_wait(_):raise AssertionError('Ambiguidade não pode ser resolvida esperando')
+        def must_not_wait(_):raise AssertionError('Waiting cannot resolve ambiguous identity')
         with self.assertRaises(RuntimeError):self.recover(duplicate=True,wait=.5,on_wait=must_not_wait)

@@ -1,36 +1,39 @@
-# Seletor global e ordem por criação — plano
+# Global Picker and Creation Order Implementation Plan
 
-> **For agentic workers:** executar inline com superpowers:executing-plans e superpowers:test-driven-development.
+> **For agentic workers:** implement inline with superpowers:executing-plans and superpowers:test-driven-development.
 
-**Goal:** abrir o seletor global pelo comando curto e permitir ordenar/visualizar datas de criação no painel.
-**Architecture:** manter consulta/identidade existentes; timestamps em tabela separada e ordenação só na apresentação.
+**Goal:** Open the global picker with the short command. Show creation dates in the panel and allow sorting by them.
+**Architecture:** Keep the existing query and identity logic. Store timestamps separately and sort only for display.
 **Tech Stack:** Python 3.10+, SQLite, curses, stdlib.
 **Spec:** docs/superpowers/specs/2026-11-16-picker-created-order-design.md
 
 ## Global Constraints
 
-Somente estado temporário em testes. Preservar main posterior e worktree de identidade parcial. Sem commit/push/reinício do Herdr. Sem modificar semântica de curadoria.
+Use temporary state for tests. Preserve subsequent work on main and the partial identity worktree. Avoid commits, pushes and Herdr restarts. Preserve curation semantics.
 
 ## Review Focus
 
-- Migração concorrente e timestamps antigos desconhecidos não devem inventar datas.
-- Replays, edições, importação repetida e conclusão não alteram criação nem reabrem itens.
-- Ordem combina origens; seleções por ID e paginação permanecem corretas.
-- Datas locais, ausentes e inválidas; painéis estreitos e clique no botão.
-- Seletor com uma conversa ou ambiente com filtro herdado permanece global; reutilizar mostra o painel.
+- Concurrent migration and unknown legacy timestamps must not invent dates.
+- Replays, edits, repeated imports and completion preserve creation dates and cannot reopen items.
+- Sort across sources. Keep selection by ID and pagination correct.
+- Check local, missing and invalid dates, narrow panels and button clicks.
+- Keep the picker global even with one conversation or an inherited filter. Reveal a reused panel.
 
-### Task 1: Abertura global
-- [x] Alterar testes em tests/test_repository.py para comando sem argumentos mostrar todas as conversas, incluindo uma única e filtro herdado.
-- [x] Rodar suite repository: observar falha antes de remover filtro implícito em app.main.
-- [x] Adicionar teste em tests/test_runtime.py para foco no painel reutilizado; implementar em app.open_panel.
-- [x] Rodar os testes relevantes: todos passam.
+### Task 1: Open globally
 
-### Task 2: Datas de criação
-- [x] Criar tests/test_creation.py: migração legada, múltiplas conexões, novas importações e timestamps de transcrição nas tarefas/promessas/curadoria; edição e replay preservam data.
-- [x] Observar falhas; implementar item_creation e trigger em core.Store, juntar created_at em Store.items/ProjectStore.items, propagar timestamp de eventos novos em core.Collector/Store.commit_line e curation.Curator.
-- [x] Rodar testes creation/core/projects/curation: todos passam.
+- [x] Update tests/test_repository.py so a command with no arguments shows all conversations, including the single-session and inherited-filter cases.
+- [x] Observe failure in the repository suite before removing the implicit filter in app.main.
+- [x] Add a focus test for reused panels in tests/test_runtime.py and implement it in app.open_panel.
+- [x] Run the relevant tests. All pass.
 
-### Task 3: Ordenação e interface
-- [x] Criar tests/test_ordering.py e teste PTY: ordem por criação entre origens, desconhecidos ao final, botão/tecla 6 alterna e preserva seleção; datas locais e largura estreita.
-- [x] Observar falhas; implementar sort_items em ui_layout, data no texto e botão no topo. ui.panel mantém direção e usa visible ordenado para seleção.
-- [x] Atualizar README, skill e TODO. Rodar suíte inteira, compileall e diff --check. Revisar diff e instalar os arquivos verificados no checkout main sem reset, merge ou commit; conferir seletor/painel com dados descartáveis.
+### Task 2: Creation dates
+
+- [x] Create tests/test_creation.py covering legacy migration, multiple connections, new imports and transcript timestamps for tasks, promises and curation. Preserve dates across edits and replay.
+- [x] Observe failures. Implement item_creation and its trigger in core.Store. Join created_at in Store.items and ProjectStore.items. Propagate new event timestamps in core.Collector, Store.commit_line and curation.Curator.
+- [x] Run creation/core/projects/curation tests. All pass.
+
+### Task 3: Ordering and interface
+
+- [x] Create tests/test_ordering.py and a PTY test for creation order across sources, unknown dates last, button/key 6 toggling with selection preserved, local dates and narrow width.
+- [x] Observe failures. Implement sort_items in ui_layout, include the date in item text and add a top button. ui.panel retains the direction and selects using sorted visible items.
+- [x] Update README, skill and TODO. Run the full suite, compileall and diff --check. Review and install verified files in the main checkout without a reset, merge or commit. Check the picker and panel with disposable data.

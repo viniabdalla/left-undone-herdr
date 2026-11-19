@@ -36,7 +36,7 @@ def owns_plugin_link():
         local = plugin.get("source", {}).get("kind") == "local"
         if local and Path(plugin["plugin_root"]).resolve() == ROOT:
             return True
-        raise RuntimeError(f"O plugin {PLUGIN_ID} pertence a outra instalação.")
+        raise RuntimeError(f"Plugin {PLUGIN_ID} belongs to another installation.")
     return False
 
 
@@ -44,7 +44,7 @@ def install():
     destinations = links()
     for path, source in destinations.items():
         if (path.exists() or path.is_symlink()) and not owned_link(path, source):
-            raise RuntimeError(f"Conflito: {path}; nada será sobrescrito")
+            raise RuntimeError(f"Installation conflict at {path}. The existing file or link has been preserved.")
     already_linked = owns_plugin_link()
     created = []
     try:

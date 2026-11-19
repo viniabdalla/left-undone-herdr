@@ -1,14 +1,7 @@
-# Pendências com termo técnico e linguagem simples
+# Tasks with a technical term and a plain-language action
 
-Vini aprovou manter o técnico junto da tarefa em linguagem simples: uma frase
-curta para entender o que falta fazer, sem explicação completa.
+Vini approved retaining the technical term alongside a short, plain-language sentence explaining what remains to be done.
 
-Aplicar às instruções do analisador de promessas e do curador de projetos,
-compartilhadas por Codex e Claude. Preferir “termo técnico: ação simples” quando
-o termo identifica o assunto; não inventar rótulos quando não forem úteis.
-Preservar requisitos, idioma e identificadores necessários. Evidências continuam
-literais e nenhuma regra de autoria, escopo, conclusão ou coleta muda.
+Apply the instructions to the promise analyzer and project curator shared by Codex and Claude. Prefer “technical term: simple action” when the term identifies the subject. Use labels only when helpful. Preserve requirements, language and necessary identifiers. Keep evidence verbatim and preserve authorship, scope, completion and collection rules.
 
-Abordagem: editar apenas os prompts existentes. Formatação posterior de strings
-não conseguiria traduzir jargão mantendo o significado. Não migrar itens antigos
-sem evidência nem mexer no texto de tarefas nativas vindo do agente.
+Edit the existing prompts. Post-processing strings could not translate jargon while preserving meaning. Leave old items alone without evidence and preserve the agent's native task text.

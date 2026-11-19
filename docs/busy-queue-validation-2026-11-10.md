@@ -1,46 +1,22 @@
-# Confirmação de fila com agente ocupado — 2026-11-10
+# Busy-agent queue confirmation — 2026-11-10
 
-Resultado: implementado para Codex local; fila Claude indisponível nesta versão.
-Não incorporada a proteção parcial de UUID do worktree separado.
+Implemented for local Codex. This version of Claude lacks queue support. The partial UUID protection in the separate worktree was outside this change.
 
-## Comportamento
+## Behavior
 
-Enviar para agente verificado com estado `working` pede confirmação. `1` ou
-Colocar na fila usa `codex queue --thread UUID --message TEXT` na conta
-verificada. `2`, Cancelar ou Esc volta à lista preservando seleção e página.
-Agente livre continua com envio direto; bloqueado/desconhecido ou identidade
-inválida não oferece fila. No Claude ocupado, informa indisponibilidade.
+Sending to a verified agent in the `working` state prompts for confirmation. Key `1` or Queue invokes `codex queue --thread UUID --message TEXT` with the verified account. Key `2`, Cancel or Esc returns to the same page with the selection intact. Idle agents receive messages directly. Blocked or unknown states and invalid identities cannot offer queueing. Busy Claude reports that queueing is unavailable.
 
-Seleção/textos são congelados ao iniciar o envio e revalidados ao confirmar.
-Transação SQLite serializa validação e aceite da fila com alterações dos itens.
-O CLI tem timeout de 20 s; não há repetição automática nem `--resume`. Isso pode
-reter outras gravações da lista enquanto a confirmação externa está em curso.
-Recibo do Codex deve conter o UUID exato do vínculo. Falha/recibo incerto não
-limpa seleção; sucesso limpa só os itens daquele pedido, sem concluir tarefas.
+Sending freezes the selection and text. Confirmation revalidates both. A SQLite transaction serializes validation and queue acceptance against changes to the items. The CLI times out after 20 seconds, without automatic retries or `--resume`. Other list writes may wait during the external call. The Codex receipt must contain the exact binding UUID. Failure or an uncertain receipt preserves the selection. Success clears only the submitted selection and leaves the tasks open.
 
-## Evidências
+## Evidence
 
-- CLI Codex real em CODEX_HOME temporário, com rollout sintético e sem modelo:
-  exatamente um item gravado em `queue_1.sqlite`, UUID e conteúdo exatos,
-  inclusive texto literal com metacaracteres de shell. Nenhuma conversa real
-  recebeu mensagens de teste. Isso verifica persistência na fila nativa, não
-  uma execução posterior do pedido pelo modelo.
-- Curses real em PTY: mouse/teclado para enviar, confirmar e cancelar; Esc
-  cancela sem fechar o painel; falha preserva seleção; tarefa permanece na
-  lista; cancelamento preserva página; painel muito pequeno não aceita
-  confirmação invisível.
-- Tests de alterações/conclusões/seleção antes da confirmação e atualização
-  concorrente enquanto o pedido é aceito. Sem envio de snapshot alterado.
-- Revisão independente encontrou a janela entre validação e submissão e a
-  perda de paginação; ambas reproduzidas em testes RED e corrigidas GREEN.
-- 107 testes passaram. `compileall` e `git diff --check` sem erros.
-- Prévia visual dos layouts 40×24 e 18×12 em
-  `docs/evidence/busy-queue/confirmation.png` (local, ignorada pelo Git).
+- The real Codex CLI with a temporary CODEX_HOME, synthetic rollout and no model wrote exactly one item to `queue_1.sqlite`. Its UUID and content matched, including literal shell metacharacters. No real conversation received a test message. This verified native queue persistence only.
+- Real curses in a PTY exercised sending, confirmation and cancellation by mouse and keyboard. Esc canceled without closing the panel. Failure kept the selection, tasks stayed visible, cancellation preserved the page, and a tiny panel blocked invisible confirmation.
+- Tests covered edits, completion and changed selection before confirmation, and concurrent updates during acceptance. Changed snapshots were never sent.
+- Independent review identified a race between validation and submission and loss of pagination. Both regression tests failed before their fixes and passed afterward.
+- 107 tests passed. `compileall` and `git diff --check` passed.
+- The local, Git-ignored preview shows 40×24 and 18×12 layouts in `docs/evidence/busy-queue/confirmation.png`.
 
-## Limites
+## Limits
 
-O recibo confirma que a fila aceitou o pedido, não que o agente já o executou.
-Fila requer suporte a `codex queue` no CLI instalado. A validação de identidade
-é a existente nesta branch; a falha de UUID antigo durante /new ou /resume
-continua registrada como tarefa separada. O novo caminho de fila usa o UUID
-completo do vínculo, em vez de simular teclas no terminal ocupado.
+The receipt confirms queue acceptance. Later model execution was unverified. The installed CLI must support `codex queue`. Identity validation uses the checks on this branch. The stale UUID during /new or /resume remains separate work. The new path targets the full binding UUID without simulating keys in a busy terminal.

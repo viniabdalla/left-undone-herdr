@@ -19,23 +19,23 @@ class BusyQueueTests(unittest.TestCase):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
         self.root=Path(temp.name)
         self.db=Store(self.root/'state.db','test');self.addCleanup(self.db.close)
-        self.db.add('import','Primeira tarefa');self.db.add('import','Segunda tarefa')
+        self.db.add('import','First task');self.db.add('import','Second task')
         for item in self.db.items():self.db.toggle(item['id'])
 
     def offer(self):
-        def busy(_):raise runtime.AgentBusy('Agente ocupado')
+        def busy(_):raise runtime.AgentBusy('Agent busy')
         with self.assertRaises(runtime.QueueOffer) as result:runtime.send_selected(self.db,busy)
         return result.exception
 
     def test_busy_offer_freezes_selection_and_confirmation_only_clears_sent_items(self):
         offer=self.offer()
         self.assertTrue(all(i['selected'] for i in self.db.items()))
-        self.db.add('import','Selecionada depois')
+        self.db.add('import','Selected later')
         last=self.db.items()[-1];self.db.toggle(last['id'])
         sent=[]
         count=runtime.queue_selected(self.db,offer,sent.append)
         self.assertEqual(count,2)
-        self.assertEqual(sent,['You left this undone: Primeira tarefa\nYou left this undone: Segunda tarefa'])
+        self.assertEqual(sent,['You left this undone: First task\nYou left this undone: Second task'])
         self.assertEqual([i['id'] for i in self.db.items() if i['selected']],[last['id']])
         self.assertEqual(len(self.db.items()),3)
 
@@ -48,17 +48,17 @@ class BusyQueueTests(unittest.TestCase):
                     def busy(_):raise runtime.AgentBusy('busy')
                     with self.assertRaises(runtime.QueueOffer) as result:runtime.send_selected(db,busy)
                     if change=='text':
-                        with db.conn:db.conn.execute('UPDATE items SET text=? WHERE id=?',('Alterada',item['id']))
+                        with db.conn:db.conn.execute('UPDATE items SET text=? WHERE id=?',('Edited',item['id']))
                     elif change=='done':db.done([item['id']])
                     else:db.toggle(item['id'])
                     queued=[]
-                    with self.assertRaisesRegex(RuntimeError,'mudou'):runtime.queue_selected(db,result.exception,queued.append)
+                    with self.assertRaisesRegex(RuntimeError,'changed'):runtime.queue_selected(db,result.exception,queued.append)
                     self.assertEqual(queued,[])
                 finally:db.close()
 
     def test_failed_queue_keeps_selected_items_without_retry(self):
         offer=self.offer();attempts=[]
-        def fail(text):attempts.append(text);raise RuntimeError('indisponível')
+        def fail(text):attempts.append(text);raise RuntimeError('unavailable')
         with self.assertRaises(RuntimeError):runtime.queue_selected(self.db,offer,fail)
         self.assertEqual(len(attempts),1)
         self.assertTrue(all(i['selected'] for i in self.db.items()))
@@ -82,7 +82,7 @@ class BusyQueueTests(unittest.TestCase):
         finally:attempt.set();worker.join(6)
         self.assertEqual(errors,[]);self.assertTrue(finished.is_set())
         self.assertEqual(len(queued),1)
-        self.assertEqual([i['text'] for i in self.db.items()],['Segunda tarefa'])
+        self.assertEqual([i['text'] for i in self.db.items()],['Second task'])
 
     def test_confirmation_fits_narrow_panel_and_only_exposes_queue_or_cancel(self):
         build=getattr(ui_layout,'queue_confirmation_layout',None)
@@ -109,7 +109,7 @@ class NativeQueueTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('codex'),'Codex CLI not installed')
     def test_real_cli_persists_exact_payload_in_verified_account_without_a_model(self):
-        text='You left this undone: Teste literal $(touch /tmp/should-not-exist) `echo x`\nOutra tarefa'
+        text='You left this undone: Literal test $(touch /tmp/should-not-exist) `echo x`\nAnother task'
         with patch.object(runtime,'verify',return_value={'agent_status':'working'}), \
              patch.dict(os.environ,{'CODEX_HOME':'/wrong/account','CODEX_THREAD_ID':'wrong-thread'}):
             runtime.queue(self.binding,text)
@@ -120,8 +120,8 @@ class NativeQueueTests(unittest.TestCase):
         self.assertEqual(len(self.history.read_text().splitlines()),1)
 
     def test_identity_change_prevents_queue_submission(self):
-        with patch.object(runtime,'verify',side_effect=RuntimeError('Vínculo mudou')):
-            with self.assertRaisesRegex(RuntimeError,'Vínculo mudou'):runtime.queue(self.binding,'test')
+        with patch.object(runtime,'verify',side_effect=RuntimeError('Binding changed')):
+            with self.assertRaisesRegex(RuntimeError,'Binding changed'):runtime.queue(self.binding,'test')
         self.assertFalse((self.root/'queue_1.sqlite').exists())
 
     def test_claude_has_no_queue_fallback_to_typing_a_prompt(self):

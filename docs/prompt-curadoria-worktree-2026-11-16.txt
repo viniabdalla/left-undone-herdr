@@ -1,14 +1,15 @@
-Você vai cuidar da confiabilidade da curadoria do Left Undone. O Watchdog continua em outra conversa.
+You will work on the reliability of Left Undone’s curation. Watchdog development continues in a separate conversation.
 
-Leia primeiro o handoff completo:
+Start by reading the full handoff at
 /home/tropico/Projects/left-undone-herdr/docs/handoff-curadoria-2026-11-16.md
 
-Leia também as referências e evidências citadas nele. Você está no worktree /home/tropico/Projects/left-undone-herdr-codex-title, branch fix/codex-active-thread. Ele diverge da main instalada: preserve o trabalho exclusivo e confira as seis alterações posteriores da main antes de propor mudanças. Não presuma que o código do worktree é o código que reproduziu a falha.
+Read the references and evidence it cites. You are in the worktree /home/tropico/Projects/left-undone-herdr-codex-title on branch fix/codex-active-thread. It has diverged from the installed main branch. Preserve the work unique to the worktree and review the six later changes on main before proposing changes. The failure was reproduced with the installed code. Check the differences before drawing conclusions about the worktree.
 
-Sua primeira resposta deve ser um resumo curto, em português, para eu conferir:
-1. Quais são as quatro melhorias que aprovei e o efeito de cada uma para mim.
-2. Quais falhas foram reproduzidas com Codex e o que ainda não sabemos.
-3. Como você pretende testar sem mexer na base ou na sessão real.
-4. Como vai preservar vínculo de conversa, evidência, timestamps, concorrência e histórico.
+Your first reply should be a short summary in Portuguese for me to review.
 
-Não programe ainda. Repasse comigo o que entendeu e espere meu ok antes de mudar o comportamento. Não troque para um modelo maior como solução. Não implemente o Watchdog, não reabra as tarefas arquivadas e não pare o Herdr.
+1. Which four improvements did I approve, and what will each change for me?
+2. Which failures were reproduced with Codex, and what remains unknown?
+3. How will you test without changing the live database or session?
+4. How will you protect the conversation binding, evidence, timestamps, concurrency and history?
+
+Before coding or changing behavior, explain what you understood and wait for my approval. Keep the current model size. Leave Watchdog implementation to its own conversation, keep archived tasks closed and leave Herdr running.

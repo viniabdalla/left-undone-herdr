@@ -19,7 +19,7 @@ class OrganizationTests(unittest.TestCase):
     def test_atomic_move_preserves_identity_history_reason_and_source_date(self):
         a,b=self.db.items();source=a['source']
         changes=[self.change(a,text='Readable: same task',created_at=1234,evidence='Exact source event timestamp'),
-                 self.change(b,reason='Concluída',evidence='Verified implementation')]
+                 self.change(b,reason='Completed',evidence='Verified implementation')]
         result=self.organizer()(self.db,changes,'test-event',associate='/new')
         self.assertEqual(result,2)
         self.assertEqual(self.organizer()(self.db,changes,'test-event',associate='/new'),0)
@@ -27,33 +27,44 @@ class OrganizationTests(unittest.TestCase):
         item=view.items()[0];self.assertEqual(item['id'],a['id']);self.assertEqual(item['source'],source)
         # A proved existing creation date must never be replaced during organization.
         self.assertEqual(item['created_at'],a['created_at'])
-        self.assertEqual(view.history_items()[0]['closure_reason'],'Concluída')
+        self.assertEqual(view.history_items()[0]['closure_reason'],'Completed')
         self.assertEqual(view.conn.execute('SELECT count(*) FROM panel_organization').fetchone()[0],2)
         self.assertEqual(view.conn.execute('SELECT project FROM project_sessions WHERE session="viewer"').fetchone()[0],'/new')
 
     def test_stale_snapshot_rolls_back_every_change(self):
-        a,b=self.db.items();changes=[self.change(a,text='Changed: description'),self.change(b,reason='Duplicada',evidence='Same obligation')]
+        a,b=self.db.items();changes=[self.change(a,text='Changed: description'),self.change(b,reason='Duplicate',evidence='Same obligation')]
         changes[1]['expected']['text']='stale'
-        with self.assertRaisesRegex(RuntimeError,'mudou'):self.organizer()(self.db,changes,'stale')
+        with self.assertRaisesRegex(RuntimeError,'changed'):self.organizer()(self.db,changes,'stale')
         self.assertEqual([i['text'] for i in self.db.items()],['Old title','Already done'])
         self.assertEqual(self.db.conn.execute('SELECT project FROM project_sessions WHERE session="viewer"').fetchone()[0],'/old')
 
     def test_private_promises_cannot_be_moved_between_projects(self):
         self.db.add('promise','Private')
         private=next(i for i in self.db.items() if i['origin']=='promise')
-        with self.assertRaisesRegex(ValueError,'privad'):self.organizer()(self.db,[self.change(private)],'private')
+        with self.assertRaisesRegex(ValueError,'Private'):self.organizer()(self.db,[self.change(private)],'private')
 
-    def test_legacy_import_selection_survives_becoming_shared(self):
+    def test_legacy_import_selection_survives_reorganization_without_reassignment(self):
         self.db.add('import','Legacy import','native')
         item=next(i for i in self.db.items() if i['source']=='native')
         self.db.toggle(item['id'])
         self.organizer()(self.db,[self.change(item)],'selection')
         view=self.db.view_project('/new');self.addCleanup(view.close)
-        self.assertEqual(view.items()[0]['selected'],1)
+        self.assertEqual(next(i for i in view.items() if i['id']==item['id'])['selected'],1)
+        self.assertEqual(view.items()[0]['session'],'viewer')
 
     def test_collector_native_tasks_are_not_moved_or_reopened_by_aliasing(self):
         self.db.add('task','Native task','tool-1')
         item=next(i for i in self.db.items() if i['source']=='tool-1')
-        with self.assertRaisesRegex(ValueError,'nativas'):
+        with self.assertRaisesRegex(ValueError,'Native'):
             self.organizer()(self.db,[self.change(item)],'native')
         self.assertEqual(next(i['session'] for i in self.db.items() if i['source']=='tool-1'),'viewer')
+
+    def test_organization_event_is_idempotent_per_session(self):
+        other = ProjectStore(self.db.path, 'other', self.db.project)
+        self.addCleanup(other.close)
+        other.import_md('- [ ] Another task')
+        first = self.change(self.db.items()[0], text='First session edit')
+        second = self.change(other.items()[0], text='Other session edit')
+        self.assertEqual(self.organizer()(self.db, [first], 'audit'), 1)
+        self.assertEqual(self.organizer()(other, [second], 'audit'), 1)
+        self.assertEqual(self.organizer()(other, [second], 'audit'), 0)

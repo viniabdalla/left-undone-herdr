@@ -2,32 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Pedir confirmação antes de qualquer conclusão manual no painel.
+**Goal:** Request confirmation before any manual completion in the panel.
 
-**Architecture:** DoneOffer congela seleção; modal compartilhado com a fila
-aceita confirmar/cancelar. confirm_done valida o snapshot e aplica Store.done
-sob transação. Modelos e regras de curadoria não mudam.
+**Architecture:** DoneOffer freezes the selection. The shared queue modal accepts confirmation or cancellation. confirm_done validates the snapshot and applies Store.done inside a transaction. Preserve models and curation rules.
 
-**Tech Stack:** Python, curses, SQLite, unittest e PTY.
+**Tech Stack:** Python, curses, SQLite, unittest and PTY.
 
 **Spec:** docs/superpowers/specs/2026-11-10-confirm-completion-design.md
 
 ## Global Constraints
 
-Preservar seleção/página no cancelamento e regras de conclusão automática.
-Confirmar somente itens apresentados; bloquear confirmação invisível.
+Cancellation preserves page and selection. Keep automatic completion rules. Confirm only the items presented and block invisible confirmation.
 
 ## Review Focus
 
-Seleção vazia; nova seleção ou alteração de texto durante modal; mouse e tecla
-2 abrindo o mesmo modal; Esc sem fechar painel; redimensionamento pequeno.
+Check empty selection, new selections or text changes during confirmation, the same modal opened by mouse and key 2, Esc returning to the panel and resizing to a small window.
 
-### Task 1: Confirmação manual
+### Task 1: Manual confirmation
 
-- [x] Escrever e observar regressões antes de implementar.
-- [x] Adicionar DoneOffer/confirm_done; compartilhar layout de confirmação.
-- [x] Atualizar testes de conclusão para confirmação explícita e exercitar
-  cancelar/confirmar/resize em curses real.
-- [x] Rodar suíte, revisar, documentar, recarregar painel e registrar resultado.
+- [x] Write regression tests and observe failures before implementation.
+- [x] Add DoneOffer/confirm_done and share the confirmation layout.
+- [x] Update completion tests for explicit confirmation and exercise cancellation, confirmation and resizing in real curses.
+- [x] Run the suite, review, document, reload the panel and record the result.
 
-Resultado: docs/confirm-completion-validation-2026-11-10.md.
+Result: docs/confirm-completion-validation-2026-11-10.md.

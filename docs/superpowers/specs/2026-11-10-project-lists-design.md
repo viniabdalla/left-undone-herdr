@@ -1,33 +1,13 @@
-# Listas persistentes por projeto
+# Persistent project lists
 
-Comportamento aprovado pelo usuário: tarefas/checklists compartilhados por
-projeto; promessas específicas pertencem à conversa de origem. O painel deverá
-acompanhar a conversa visível. A lista compartilhada é a primeira etapa,
-priorizada pelo usuário antes de corrigir a transição `/new`/`/resume`.
+The user approved sharing tasks and checklists by project while keeping specific promises in their originating conversation. The panel should follow the visible conversation. The user prioritized the shared list ahead of fixing the `/new` and `/resume` transition.
 
-Cada projeto reúne tarefas de suas sessões Codex e Claude. Concluir em um painel
-conclui para todos; selecionar para enviar é privado à conversa. Fechar painéis,
-reiniciar processos ou criar outra sessão não perde as tarefas. Importações novas
-pertencem ao projeto; tarefas nativas mantêm a sessão de origem para um snapshot
-de uma sessão não encerrar tarefas de outra. Promessas de outra sessão não são
-analisadas, mostradas nem encerradas pela sessão atual.
+Each project combines tasks from its Codex and Claude sessions. Completion in one panel applies to all panels. Selection for sending is private to the conversation. Tasks survive panel closure, process restarts and new sessions. New imports belong to the project. Native tasks retain their source session so one session's snapshot cannot close another session's tasks. The current session cannot analyze, display or close another session's promises.
 
-Decisão de implementação: reutilizar SQLite e preservar IDs/históricos existentes,
-adicionando associação sessão→projeto e uma visão compartilhada. Migrar todas as
-linhas para uma nova chave apagaria a proveniência necessária aos coletores;
-arquivos Markdown como estado principal perderiam transações e baixas manuais.
+Reuse SQLite and preserve existing IDs and history by adding a session-to-project association and a shared view. Moving all rows to a new key would erase the provenance collectors need. Using Markdown as primary storage would lose transactions and manual closures.
 
-Projeto padrão é a raiz Git do cwd inicial verificável da conversa (sem Git,
-pasta exata; worktrees separados). `--project` permite associar explicitamente
-uma conversa que começou em outra pasta. Associação explícita prevalece sobre
-inferência. Projetos sem histórico verificável continuam com estado de sessão.
-Listas são locais à máquina nesta etapa; não há sincronização entre PCs.
+The default project is the Git root of the conversation's verifiable initial working directory, or the exact directory outside Git. Worktrees are separate. `--project` explicitly associates a conversation started elsewhere and takes precedence over inference. Projects without verifiable history keep session state. Lists are local to each machine at this stage.
 
-UI mantém mouse/teclas e indica o projeto. Exportar representa a lista visível;
-importar cria tarefas compartilhadas. A seleção do destinatário continua exigindo
-identidade verificada. Esta etapa não declara resolvido o UUID nativo obsoleto:
-troca automática da conversa e envio atômico permanecem trabalho separado.
+The UI keeps mouse and keyboard controls and identifies the project. Export writes the visible list. Import creates shared tasks. Choosing a recipient still requires verified identity. Automatic conversation switching and atomic delivery remain separate work on the stale native UUID issue.
 
-Validação: duas sessões/agentes no mesmo projeto, outro projeto isolado, promessas
-privadas, seleção independente, conclusão compartilhada, importação deduplicada,
-baixas persistentes, snapshots independentes, dados legados e reabertura.
+Validate two sessions and agents in the same project, a separate isolated project, private promises, independent selection, shared completion, deduplicated imports, persistent closures, independent snapshots, legacy data and reopening.

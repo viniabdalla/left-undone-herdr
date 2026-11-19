@@ -1,174 +1,107 @@
 ---
 name: left-undone-herdr
-description: Abrir ou reencontrar o painel Left Undone no Herdr para acompanhar tarefas e promessas de uma conversa Codex ou Claude, importar ou exportar pendências.
+description: Open or find a Left Undone panel in Herdr to track tasks and promises from a Codex or Claude conversation, or import and export open items.
 ---
 
-# Left Undone no Herdr
+# Left Undone for Herdr
 
-Use quando a pessoa pedir o painel de pendências no Herdr. Requer Linux,
-Python 3.10+, Herdr 0.9.1+ e o plugin local `left-undone` vinculado.
+Use this skill when someone asks for the open tasks panel in Herdr. It requires Linux, Python 3.10 or newer, Herdr 0.9.1 or newer, and a linked local `left-undone` plugin.
 
-O executável desta skill é `scripts/left-undone` (resolva relativo a este
-SKILL.md). Ele usa a mesma implementação do plugin, sem criar outro coletor.
+Resolve `scripts/left-undone` relative to this SKILL.md. The wrapper uses the plugin implementation and shares its collector.
 
-## Atalho e seletor de conversas
+## Choose a conversation
 
-O instalador também disponibiliza `left-undone` em `~/.local/bin`.
-Sem argumentos, sempre abre o seletor global das conversas verificáveis do
-Herdr, independentemente da pasta e mesmo com uma única conversa. Não selecione
-automaticamente uma conversa pelo cwd. A lista mostra títulos, IDs, conta e
-contagens de pendências.
-No terminal, o seletor ocupa o próprio terminal até escolher ou sair com Esc.
-Invocado sem TTY pelas ferramentas do agente, abre em split no Herdr; nunca popup.
-`left-undone open --repo <pasta>` filtra explicitamente por pasta e abre direto
-se houver uma única conversa verificável; `left-undone open` é global. Em subpastas usa raiz Git; sem Git usa pasta
-exata; cada worktree é separado. A pasta inicial vem do histórico da sessão.
-Conversas salvas sem sessão ativa precisam ser retomadas no agente.
-A pasta define a lista compartilhada e filtra candidatos; identidade para abrir/enviar continua por UUID,
-conta e processo. Se o usuário pedir esta conversa, use o vínculo exato abaixo,
-mesmo que o diretório de trabalho da ferramenta esteja em outro projeto.
+The installer also places `left-undone` in `~/.local/bin`. With no arguments, it always opens the global picker of verifiable Herdr conversations, regardless of the current directory or how many sessions are available. The picker shows titles, IDs, accounts and open item counts. In a terminal it stays open until the user makes a choice or presses Esc. Agent tools without a TTY open it in a regular Herdr split.
 
-## Listas por projeto
+Use `left-undone open --repo <directory>` to explicitly filter by project. A single verifiable match opens directly. `left-undone open` uses the global picker. The filter uses the session history’s initial directory, resolved to the Git root, or the exact directory outside Git. Worktrees remain separate. Saved conversations without a live session must be resumed in the agent.
 
-Tarefas nativas e itens importados aparecem nas sessões do mesmo projeto;
-promessas continuam privadas à conversa de origem. Concluir uma tarefa afeta
-todos os painéis do projeto. Selecionar para enviar é privado à conversa.
-O estado continua local à máquina e sobrevive a novas sessões.
-Por padrão, o projeto é a raiz Git do cwd inicial verificado (ou pasta exata).
-Se a conversa começou em outra pasta mas trata de um projeto identificado pelo
-usuário, associe explicitamente com `python3 scripts/left-undone open --pane PANE
---session UUID --project /caminho/do/projeto`. Essa associação persiste. Nunca
-use `--project` para adivinhar qual é o destinatário. Não altere a associação de
-outras conversas sem evidência de que pertencem ao projeto.
-Após trocar /new ou /resume, a atualização automática do destinatário ainda
-está pendente: compartilhar a lista não corrige o UUID nativo obsoleto.
+The directory determines the project exchange file and filters candidates. Opening or sending requires the UUID, account and process. When the user requests the current conversation, use its verified binding even if the tool runs in a different project.
 
-## Abrir uma conversa identificada
+1. Run `python3 scripts/left-undone list`. The result lists verifiable panes, session UUIDs, accounts and transcripts, and explains unavailable sessions.
+2. Once the requested conversation is unambiguous, run `scripts/left-undone open --pane <pane> --session <UUID>`. Otherwise, run `scripts/left-undone open` and let the user choose. Visual focus, the working directory and an inherited `HERDR_PANE_ID` are insufficient to identify the recipient. Do not substitute another conversation.
+3. A new panel opens in a right-hand split and preserves the existing focus. Reopening an existing panel focuses it even in another tab. Its collector reads only the bound conversation’s transcript.
 
-1. Rode `python3 scripts/left-undone list`. A saída identifica panes, UUIDs, conta e
-   histórico verificáveis; também explica sessões indisponíveis.
-2. Se a pessoa identificou a conversa e os dados permitem confirmar o destino,
-   rode `scripts/left-undone open --pane <pane> --session <UUID>`.
-   Sem correspondência inequívoca, rode `scripts/left-undone open`: abre uma
-   seleção no Herdr. Não use foco visual, cwd ou HERDR_PANE_ID herdado como
-   prova da identidade. Não escolha outra conversa silenciosamente.
-3. A abertura cria um split à direita sem roubar foco, ou reencontra o painel
-   existente, dando foco a ele mesmo em outra aba. O painel lê apenas o histórico da conversa vinculada.
+## Project lists
 
-Clique na tarefa (qualquer linha) ou use a letra para selecionar. Botões
-Enviar e Concluir aparecem com a contagem dos selecionados. A roda do mouse
-e os botões < / > trocam páginas; Exportar, Importar e Fechar são clicáveis.
-Textos quebram na largura do painel; tarefas muito altas continuam em outra página.
-No seletor de conversas, clique na linha e depois em Abrir.
+Each session owns its tasks, promises, selections and history. A new conversation starts empty. Reopening the same session restores its local list.
 
-Em projetos, o painel usa títulos destacados e descrições, em grupos Para a IA
-e Para você. O botão Projeto (`8`) troca somente a lista; o cabeçalho continua
-mostrando a conversa destinatária verificada. Promessas privadas de outros
-projetos/conversas não são exibidas. Histórico (`7`) é somente leitura e mostra
-motivos comprovados de encerramento, ou “Encerrada” para registros ambíguos.
-Ordem (`6`) alterna recentes/antigas; troca de projeto, histórico ou ordem volta
-à primeira página preservando seleções. Datas conhecidas são discretas; um único
-aviso resume datas antigas ausentes. Nunca invente datas ou motivos de baixa.
+By default the project is the Git root of the verified starting directory, or that exact directory outside Git. If the conversation started elsewhere and the user identifies its project, link it explicitly. The association persists.
 
-Letras selecionam itens. `1` envia os selecionados à conversa vinculada,
-sem retirá-los da lista. `2` pede confirmação para concluir. `3` exporta. `4` importa o último arquivo
-exportado. Setas trocam páginas. Esc fecha; estado e seleção ficam salvos.
+```sh
+python3 scripts/left-undone open --pane PANE --session UUID --project /path/to/project
+```
 
-Na confirmação de conclusão manual, `1` ou **Confirmar** conclui o snapshot
-apresentado; `2`, **Cancelar** ou Esc volta ao painel sem concluir, preservando
-seleção e página. Itens alterados/concluídos/deselecionados durante a pergunta
-invalidam a confirmação. A conclusão automática pela curadoria não muda.
+Never use `--project` to guess a recipient. Change another conversation’s association only with evidence that it belongs to the project. Project sharing does not resolve a stale native UUID after `/new` or `/resume`.
 
-O botão **Coletar agora** e a tecla `5` solicitam uma rodada imediata ao
-coletor existente, sem interromper a coleta automática. Pedidos repetidos são
-agrupados; se houver análise em andamento, aguardam essa rodada terminar.
-O pedido também interrompe a espera após erro, mantendo a validação da sessão.
-A leitura permanece incremental: eventos já processados não são reanalisados.
+## Panel controls
 
-Enviar com Codex ocupado abre uma confirmação: `1` ou **Colocar na fila** usa
-`codex queue` na conta e no UUID verificados; `2`, **Cancelar** ou Esc retorna
-à lista preservando seleção e página. Não interrompe o turno atual nem conclui
-as tarefas. O snapshot dos itens e a identidade são revalidados ao confirmar.
-Falha/resultado incerto não limpa seleção nem repete o envio: confira a fila
-nativa antes de tentar de novo. Claude não tem fila disponível nesta versão;
-o painel informa a limitação e mantém os itens selecionados.
+Click any line of a task or press its letter to toggle selection. Send and Complete show the selection count. The mouse wheel, arrow keys and page buttons change pages. Long text wraps to the panel width and tall items continue onto the next page. Export, Import and Close are clickable. In the conversation picker, click a row and then Open.
 
-Para arquivo escolhido: use `export` ou `import --file <arquivo>` junto com
-`--binding <arquivo .binding.json>`. O arquivo de vínculo é criado em
-`~/.local/state/left-undone-herdr/`; derive o correto pela sessão no JSON,
-não pelo arquivo mais recente. `items --binding ...` mostra o estado.
-Importação é aditiva, ignora `[x]` e não reabre baixas manuais.
+- **1** sends the selected items to the linked conversation. They remain open.
+- **2** asks for confirmation before marking items complete. Press `1` or click Confirm to complete the displayed selection. Press `2`, click Cancel, or press Esc to return to the same selection and page. Editing, completing or deselecting an item during confirmation invalidates the request. Automatic curation operates independently.
+- **3** merges open items and published closures into the chosen project’s `.left-undone/tasks.md`. **4** opens a chooser. Select individual tasks and confirm to import them, or press Esc to cancel.
+- **5** requests an immediate round from the active collector, including during the retry delay after an error. Repeated requests are combined and wait for any analysis already in progress. The collector still verifies the session and skips previously processed events. Automatic collection continues.
+- **6** switches between newest first and oldest first. **7** toggles read-only session history. **8** chooses the project for Export and Import. These changes return to the first page and preserve selections. The header always identifies the verified recipient.
+- **9** switches the interface between English and Portuguese and saves the choice locally.
+- **Esc** closes the panel. State and selections are saved.
 
-Os analisadores usam o CLI autenticado da conta verificada: Claude Haiku,
-Codex gpt-6-luna com esforço low. No projeto, recebem resposta final, pedidos
-recentes e itens compactos do projeto, incluindo outras sessões como contexto.
-Não substitua por modelo maior nem reenvie a conversa inteira.
-Falhas de login/limite/JSON aparecem no painel; não apagam a lista.
+Project panels group highlighted titles and descriptions under **For the agent** and **For you**. Other projects’ and conversations’ private promises stay hidden. History shows documented closure reasons or “Closed” for ambiguous records. Known dates appear beside items, with a single notice for missing historical dates. Never invent a date or a reason for closure.
 
-A curadoria aplica automaticamente adições, atualizações, conclusões com
-evidência e consolidação de duplicatas. Conflitos preservam o item sem perguntar;
-novidades diferentes continuam entrando. Tarefas nativas/promessas de outras
-sessões não são alteradas. Não trate promessa privada alheia como substituta de
-uma tarefa compartilhada. Nenhuma tarefa é concluída por simples omissão.
-O heartbeat apenas verifica mudanças; não há chamada ao LLM em polling ocioso.
-Use `python3 scripts/left-undone changes --binding ARQUIVO` para conferir o
-histórico de alterações, e `items --binding` para listar sem abrir outro painel.
-A curadoria não corrige o destinatário obsoleto após /new ou /resume.
+If Codex is busy, press `1` or click Queue to use `codex queue` for the verified account and UUID. Press `2`, click Cancel, or press Esc to return to the same selection and page. Confirmation revalidates the items and recipient. A queued request leaves the current turn running and the selected items open. Failures preserve selections and trigger no automatic resend. Check the native queue before retrying an uncertain delivery. Claude queuing is unavailable in this version. The panel explains the limitation and keeps the selection.
 
-Se a sessão não foi identificada pelo Herdr, explique a indisponibilidade.
-Não invente UUID, não use report-agent-session com ID deduzido do cwd e
-não reinicie o servidor. Se necessário, verifique as integrações nativas
-com `herdr integration` e peça que o usuário identifique a conversa.
+## Import, export and curation
 
-Limite do Herdr 0.9.1: o envio valida identidade imediatamente antes de
-`agent prompt`, mas a API não oferece envio atômico condicionado ao UUID.
-Não repita automaticamente um envio após timeout/erro ambíguo.
+Use `export --file <file>` or `import --file <file>` with `--binding <path.binding.json>` to choose a file. Find the binding in `~/.local/state/left-undone-herdr/` or the configured state directory. Match the session UUID inside the JSON. File modification time cannot identify the session. Use `items --binding` to inspect the list. Import adds open items, skips checked entries and preserves manual completions.
 
-Falha ao vivo confirmada em 2026-11-10 com Codex 0.167.0/integração v8:
-após /new ou /resume, o Herdr pode anunciar o UUID antigo até a primeira
-interação da conversa escolhida. Reabrir o painel nesse intervalo não basta.
-Quando houver troca de conversa, aguarde uma resposta a uma mensagem enviada
-diretamente ao Codex antes de abrir/enviar pelo Left Undone. Não anuncie a
-validação completa de troca/retomada como aprovada enquanto essa falha existir.
+Analyzers use the verified account’s authenticated CLI. Claude uses Haiku and Codex uses gpt-6-luna at low effort. With a project, the analyzer receives the final reply, recent requests and a compact list of this session’s items. Keep the configured model and input bounds. Authentication, limit and JSON failures appear in the panel and preserve the list.
+
+The curator adds and updates items, completes tasks with evidence and consolidates duplicates. Conflicts preserve the affected item without prompting, while independent changes continue. Omission alone cannot establish completion. Idle polling checks for changes without invoking a model. Inspect recent changes or items without opening another panel.
+
+```sh
+python3 scripts/left-undone changes --binding PATH.binding.json
+python3 scripts/left-undone items --binding PATH.binding.json
+```
+
+## Session identity and recovery
+
+If Herdr cannot identify the session, explain why. If needed, check the native integrations with `herdr integration` and ask the user to identify the conversation. Never invent a UUID, run `report-agent-session` with an ID inferred from the working directory, or restart the server to recover identity.
+
+Herdr 0.9.1 validates delivery through `agent prompt` without an atomic UUID precondition. Left Undone verifies the recipient immediately before sending. Do not retry automatically after a timeout or ambiguous error.
+
+A live test on 2026-11-10 with Codex 0.167.0 and integration v8 confirmed that Herdr can announce the old UUID after `/new` or `/resume` until the chosen conversation’s first interaction. When switching conversations, send a message directly to Codex and wait for its reply before opening or sending through Left Undone. Reopening early or running curation does not correct the recipient. Full switch and resume validation remains open.
+
+### Codex app-server without Herdr context
+
+An absent `HERDR_ENV` can mean the app-server ran a tool without the terminal environment. The wrapper recovers context when `CODEX_THREAD_ID` matches exactly one native Herdr session and a verifiable interactive Codex process. Run `list` before asking the user to reopen the conversation.
+
+For an unregistered session, check `herdr integration status`. Installing the Codex integration with `herdr integration install codex` is part of an authorized plugin installation. Keep Herdr and Codex running.
+
+An already-open conversation may need initial registration.
+
+1. Generate a fresh marker with `python3 -c 'import uuid; print("LU-"+uuid.uuid4().hex)'`.
+2. Post the marker in a commentary message. Immediately run `python3 scripts/left-undone recover --marker <marker>`, substituting the full generated value (`LU-` and 32 hexadecimal digits). Never reuse an example.
+3. Recovery requires a real `CODEX_THREAD_ID`, a commentary marker in the account’s transcript from the past five minutes, the same marker **visible** in exactly one pane, and matching foreground PID and environment. It invokes the native hook and checks the registration without sending prompts.
+4. Open the returned pane and UUID and check `list` again. If the marker has scrolled offscreen, post a fresh marker and retry. On ambiguity or a mismatch, stop before registering manually or sending anything.
+
+Recovery applies to the current session only. Titles, directories and focus cannot establish bindings, and later `/new` or `/resume` switches still require the checks above. Leave the generic skill embedded in the Herdr binary intact.
+
+## When the user asks for an existing checklist
+
+Open the panel and import a Markdown file with a `- [ ]` entry for each item still open. Exclude installation if it has already finished. Match the binding’s UUID to the requested conversation and verify the result with `items --binding`.
+
+Project imports can be curated automatically or completed manually with key `2`. Confirm actions in the history before reporting that the model recognized completion. Check the rendered panel with `herdr pane read` and a capture before reporting readiness.
+
+If the plugin is missing on this machine and installation is authorized, run `python3 install.py` from the local project. Keep the skill, wrapper and implementation together.
 
 
-## Codex com app-server e contexto ausente
+## Dispatch a sub-agent
 
-`HERDR_ENV` ausente no comando não prova que a interface está fora do Herdr:
-o app-server pode executar ferramentas sem herdar o ambiente do terminal.
-O wrapper recupera o contexto quando `CODEX_THREAD_ID` corresponde a exatamente
-uma sessão nativa do Herdr e a um processo Codex interativo verificável.
-Execute `list` antes de mandar a pessoa reabrir a conversa.
+Select one task and click **Dispatch Sub-Agent** (key 0). The parent agent reviews its own conversation for relevant context. If a decision is missing, use the supplied question callback and ask the user before opening a tab. Otherwise choose both the model and effort, then use the supplied dispatch command with a self-contained brief on stdin. It returns the tab, pane and worktree. New Codex workers start with approvals and sandboxing disabled. New Claude workers start in the `bypassPermissions` mode. The worker uses the report command in its initial prompt to send its summary, verification and outstanding work back to the panel. Report blocked when user input is needed. Press R in the original panel to read dispatch reports.
 
-Se a sessão não estiver registrada, confira `herdr integration status`.
-Instalar a integração Codex (`herdr integration install codex`) faz parte da
-instalação autorizada do plugin; não reinicie o Herdr nem o Codex.
-Uma conversa já aberta pode precisar de registro inicial. Gere uma marca nova
-com `python3 -c 'import uuid; print("LU-"+uuid.uuid4().hex)'`, publique-a em uma
-mensagem de commentary e execute logo em seguida
-`python3 scripts/left-undone recover --marker LU-<32 dígitos hexadecimais>`.
-Não reutilize uma marca de exemplo. O comando exige `CODEX_THREAD_ID` real,
-marca de commentary no histórico da conta com até cinco minutos, a mesma marca
-no conteúdo **visível** de exatamente um painel, PID foreground e ambiente
-concordantes. Ele invoca o hook nativo e confere o registro. Não envia prompts.
-Use o pane/UUID retornado para abrir e confira `list` novamente.
-Se a marca saiu da tela, publique uma nova e tente a recuperação novamente.
-Em divergência/ambiguidade, não improvise um registro manual nem envie.
-Essa recuperação pontual não corrige futuras trocas /new ou /resume.
-Não use título, pasta ou foco como vínculo.
-Não altere a skill genérica embutida no binário Herdr.
+Use **Review** (uppercase V) to check the selected tasks, or all open tasks if none are selected. A small model checks for delivery, closes completed tasks and sends the remaining work to the linked main session. The report shows the result of each handoff. **Collect** (5) requests the usual incremental collection.
 
-## Checklist solicitado pelo usuário
+## Renew a Codex session or dispatch a plan
 
-Quando a pessoa pedir o painel com pendências já levantadas, abra o painel
-e importe um Markdown com `- [ ]` para cada item ainda aberto. Use o arquivo
-`.binding.json` cujo UUID corresponde à conversa escolhida e confira com
-`items --binding`. Instalação já concluída não entra como pendência.
-Itens importados no projeto têm curadoria automática e também podem ser
-concluídos manualmente pela tecla 2. Confirme ações no histórico, não presuma
-que o modelo reconheceu uma conclusão. Verifique o painel renderizado
-com `herdr pane read` e uma captura antes de anunciar que está pronto.
+Press **H** in a Codex project panel to export its open tasks and request a local handoff. Update TODO.md using the worktree’s instructions and preserve its consumer’s format. Evaluate commit and push using the repository policy and the user’s authorization. Return the saved handoff reference on the requested receipt line. The panel opens a successor in a split, runs /init, verifies the successor, restores the handoff and imports the exported tasks in the same Left Undone panel. Close the old Codex pane only when the panel confirms the new connection. When the active thread and displayed list differ, H asks for explicit confirmation before carrying the displayed tasks. If a step needs attention, answer in the linked conversation and use H to continue the pending transition.
 
-Se o plugin estiver ausente nesta máquina, use o projeto local e execute
-`python3 install.py` após a instalação ter sido autorizada. Mantenha projeto
-e skill juntos; não copie somente o SKILL.md sem seu wrapper/implementação.
+For a planning dispatch, select one item and press **P**. Prepare a planning-only brief for the native Codex or Claude planner. Read the proposal with **R**. Selecting **0** on that item starts a separate execution dispatch and includes the proposed plan for review by the parent.

@@ -71,6 +71,6 @@ app.collect(binding,root)
                 self.assertEqual({i['text'] for i in db.items()},{'Build the button','Automatic work'})
             finally:
                 worker.terminate();worker.communicate(timeout=5);db.close()
-            with self.assertRaisesRegex(RuntimeError,'Coletor parou'):
+            with self.assertRaisesRegex(RuntimeError,'Collector stopped'):
                 request_collection(worker,request)
             self.assertFalse(request.exists())

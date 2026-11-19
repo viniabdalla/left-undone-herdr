@@ -1,14 +1,7 @@
-# Confirmar conclusão manual
+# Confirm manual completion
 
-Vini aprovou: clique em Concluir ou tecla 2 pergunta quantos itens selecionados
-serão concluídos. Confirmar conclui; Cancelar/Esc preserva seleção e página.
-Só afeta conclusão manual. A curadoria automática continua com suas regras.
+Vini approved a prompt showing how many selected items will close when the user clicks Complete or presses 2. Confirm closes them. Cancel or Esc preserves selection and page. Automatic curation keeps its existing completion rules.
 
-Reutilizar o modal da fila: 1/Confirmar, 2/Cancelar, Esc cancela. Congelar IDs
-e textos ao abrir; conferir seleção, texto e estado ao confirmar sob transação.
-Mudanças invalidam o pedido e exigem revisão, sem concluir outros itens.
-Seleções adicionadas depois não entram na confirmação antiga. Painel pequeno
-demais não deve aceitar confirmação invisível.
+Reuse the queue modal. Key 1 confirms and key 2 or Esc cancels. Freeze IDs and text on opening. Check selection, text and state inside a transaction on confirmation. Changes invalidate the request and require review. An earlier confirmation cannot close items selected later. Disable confirmation when the panel is too small to display it.
 
-Abordagem escolhida: mesma confirmação visual da fila, com ação de conclusão
-separada. Evita dois fluxos com navegação diferente e mantém a curadoria intacta.
+Use the same visual confirmation as the queue with a separate completion action. This keeps navigation consistent and preserves curation.
