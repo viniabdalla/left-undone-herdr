@@ -33,7 +33,11 @@ class DispatchFixture(unittest.TestCase):
         self.addCleanup(verify.stop)
         with patch.object(dispatch,'send') as send:
             dispatch.request(self.store,self.parent,self.root)
-        self.assertIn('choose the worker model AND reasoning effort',send.call_args.args[1])
+        prompt=send.call_args.args[1]
+        self.assertIn('Choose model and effort per ticket',prompt)
+        self.assertIn('herdr pane read PANE --source visible',prompt)
+        self.assertIn('--effort low · medium · high',prompt)
+        self.assertIn('WEAKEST model',prompt)
         self.job = self.conn.execute('SELECT * FROM dispatches').fetchone()
         self.args = Namespace(ticket=self.job['ticket'],question=False,model='chosen-model',effort='high')
 
@@ -115,6 +119,7 @@ class PlanningDispatchTests(DispatchFixture):
         with patch.object(dispatch, 'send') as send:
             dispatch.request(self.store, self.parent, self.root, plan=True)
         self.assertIn('plan only', send.call_args.args[1])
+        self.assertIn('STRONGEST model', send.call_args.args[1])
         self.job = self.conn.execute('SELECT * FROM dispatches WHERE plan=1').fetchone()
 
     def test_plan_report_keeps_selection_and_next_execution_receives_plan(self):
@@ -237,3 +242,63 @@ class TaskVerdictTests(DispatchFixture):
         with patch.dict(dispatch.os.environ,{'HERDR_PANE_ID':self.parent.pane,'CODEX_THREAD_ID':self.parent.session}):
             dispatch.save_verdict(self.conn,new,'done','The command is in the file.')
         self.assertEqual(dispatch.records(self.conn,self.parent.key)[0]['summary'], 'Command is missing')
+
+
+class MultipleDispatchTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.parent = Binding('codex','parent','account','w1:p1','term1','w1','history',1,'start')
+        self.store = Store(self.root/'state.db',self.parent.key)
+        self.addCleanup(self.store.close)
+        for text in ('Fix paging','Fix close','Fix monitor'):
+            self.store.add('task',text)
+        for item in self.store.items():
+            self.store.toggle(item['id'])
+        dispatch.setup(self.store.conn)
+        for target,value in ((dispatch,'verify'),(dispatch,'project_root')):
+            patcher = patch.object(target,value,return_value={'workspace_id':'w1','foreground_cwd':str(self.root)}
+                                   if value=='verify' else self.root)
+            patcher.start();self.addCleanup(patcher.stop)
+
+    def jobs(self):
+        return self.store.conn.execute('SELECT * FROM dispatches ORDER BY rowid').fetchall()
+
+    def test_separate_creates_one_ticket_per_task_in_a_single_send(self):
+        with patch.object(dispatch,'send') as send:
+            message = dispatch.request(self.store,self.parent,self.root)
+        jobs = self.jobs()
+        self.assertEqual(len(jobs),3)
+        self.assertEqual(send.call_count,1)
+        prompt = send.call_args.args[1]
+        for job in jobs:
+            self.assertEqual(len(dispatch.members(job)),1)
+            self.assertIn(dispatch.callback(self.root,'dispatch',job['ticket']),prompt)
+        self.assertIn('3 tickets',prompt);self.assertIn('3 calls',prompt)
+        self.assertIn('3',message)
+        with patch.object(dispatch,'send'), self.assertRaises(ValueError):
+            dispatch.request(self.store,self.parent,self.root,together=True)
+
+    def test_together_creates_one_ticket_and_completion_closes_every_task(self):
+        with patch.object(dispatch,'send') as send:
+            dispatch.request(self.store,self.parent,self.root,together=True)
+        job, = self.jobs()
+        self.assertEqual([text for _,text in dispatch.members(job)],['Fix paging','Fix close','Fix monitor'])
+        self.assertIn('TOGETHER to one worker',send.call_args.args[1])
+        self.store.conn.execute("UPDATE dispatches SET state='running'")
+        self.store.conn.commit()
+        dispatch.report(self.store.conn,job['receipt'],'done','All three fixed')
+        self.assertEqual(self.store.items(),[])
+
+    def test_together_stops_when_any_task_changed(self):
+        with patch.object(dispatch,'send'):
+            dispatch.request(self.store,self.parent,self.root,together=True)
+        job, = self.jobs()
+        first = self.store.items()[0]['id']
+        self.store.conn.execute('UPDATE items SET text=? WHERE id=?',('Changed',first))
+        self.store.conn.execute("UPDATE dispatches SET state='running'")
+        self.store.conn.commit()
+        dispatch.report(self.store.conn,job['receipt'],'done','Done')
+        self.assertEqual(dispatch.records(self.store.conn,self.parent.key)[0]['state'],'stopped')
+        self.assertEqual(len(self.store.items()),3)

@@ -169,3 +169,46 @@ class ActionTests(unittest.TestCase):
             with self.assertRaises(DoneOffer) as offer:handle_action(('key','2'),db,db.items(),sent.append)
             confirm_done(db,offer.exception)
             self.assertEqual([i['id'] for i in db.items()],[second['id']])
+
+
+class ConversationLayoutTests(unittest.TestCase):
+    def test_two_line_blocks_with_heading_and_clickable_rows(self):
+        from left_undone.ui_layout import conversation_layout
+        entries=[{'id':i,'title':f'Task {i}','detail':'Codex · account .codex · 2 open tasks','pane':f'wP:p{i}'} for i in range(3)]
+        layout=conversation_layout(entries,60,24,0,1,'Workspace: repo · ~/Projects/repo')
+        text={l.y:l.text for l in layout.lines if l.x==0}
+        self.assertEqual(text[1],'Workspace: repo · ~/Projects/repo')
+        self.assertEqual(text[4],'  Task 0')
+        self.assertTrue(text[5].startswith('    Codex · account .codex'))
+        self.assertTrue(text[6].startswith('─'))
+        self.assertEqual(text[7],'▸ Task 1')
+        self.assertEqual(layout.hit(10,8),('choose',1))
+        self.assertTrue(any(l.text=='wP:p1' for l in layout.lines))
+
+    def test_empty_workspace_says_so(self):
+        from left_undone.ui_layout import conversation_layout
+        layout=conversation_layout([],60,20,0,0,'Workspace: home')
+        self.assertTrue(any('No conversations in this workspace.' in l.text for l in layout.lines))
+        self.assertFalse(any(l.action==('open',None) for l in layout.lines))
+
+
+class PanelTopControlsTests(unittest.TestCase):
+    def test_paging_beside_counter_and_close_on_title_row(self):
+        from left_undone.ui_layout import readable_panel_layout
+        items=[{'id':i,'text':f'Task {i}','origin':'task','created_at':1.0+i} for i in range(40)]
+        layout=readable_panel_layout(items,60,30,0,'/tmp/repo','','')
+        rows={t.action:t.y for t in layout.targets}
+        self.assertEqual(rows[('close',None)],0)
+        self.assertEqual(rows[('prev',None)],rows[('next',None)])
+        self.assertLess(rows[('next',None)],5)
+
+    def test_dispatch_buttons_for_several_and_choice_screens(self):
+        from left_undone.ui_layout import readable_panel_layout,dispatch_choice_layout,close_choice_layout
+        items=[{'id':i,'text':f'Task {i}','origin':'task','created_at':1.0,'selected':1} for i in range(2)]
+        labels=[l.text for l in readable_panel_layout(items,80,30,0,'/tmp/repo','','').lines]
+        self.assertIn('[0 Dispatch 2]',labels);self.assertIn('[P Dispatch plan 2]',labels)
+        choice=[l.text for l in dispatch_choice_layout(80,20,2,False).lines]
+        self.assertIn('[1 Separate · 2 tabs]',choice);self.assertIn('[2 Together · 1 tab]',choice)
+        close=[l.text for l in close_choice_layout(80,20,3).lines]
+        self.assertIn('[1 Export and close]',close);self.assertIn('[2 Close without exporting]',close)
+        self.assertNotIn('[1 Export and close]',[l.text for l in close_choice_layout(80,20,0).lines])

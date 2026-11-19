@@ -22,3 +22,9 @@ id = "picker"
 title = "Left Undone: Choose conversation"
 placement = "split"
 command = ["python3", "left-undone", "pick"]
+
+[[panes]]
+id = "agents"
+title = "Left Undone: Agents"
+placement = "split"
+command = ["python3", "left-undone", "agents"]

@@ -2,6 +2,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from left_undone.runtime import Binding
 
 from left_undone import renewal
 from left_undone.core import CodexAdapter, Store
@@ -125,3 +127,56 @@ class RenewalTests(unittest.TestCase):
                 api.assert_called_once()
                 self.assertEqual(api.call_args.args[:3],('agent','prompt',active.pane))
                 self.assertEqual(json.loads(renewal.journal(root,old).read_text())['source']['session'],'active')
+
+
+class UniversalHandoffTests(unittest.TestCase):
+    def test_receipt_reads_claude_final_reply_and_codex_task_complete(self):
+        from left_undone.renewal import receipt
+        with tempfile.TemporaryDirectory() as folder:
+            claude = Path(folder)/'claude.jsonl'
+            claude.write_text(json.dumps({'type':'assistant','message':{'stop_reason':'end_turn',
+                'content':[{'type':'text','text':'Saved.\nREADY-abc ref-42'}]}})+'\n')
+            self.assertEqual(receipt(claude,0,'READY-abc'),'ref-42')
+            codex = Path(folder)/'codex.jsonl'
+            codex.write_text(json.dumps({'type':'event_msg','payload':{'type':'task_complete',
+                'last_agent_message':'RESTORED-x OK'}})+'\n')
+            self.assertEqual(receipt(codex,0,'RESTORED-x'),'OK')
+
+    def test_skill_is_found_by_name_only_when_installed(self):
+        from left_undone.renewal import find_skill, skill_hint
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            binding = Binding('claude','s',str(root/'account'),'p','t','w','h',1,'1')
+            with patch('pathlib.Path.home',return_value=root/'home'):
+                self.assertIsNone(find_skill(binding,root/'project'))
+                self.assertEqual(skill_hint(binding,root/'project'),'')
+                skill = root/'home/.claude/skills/someone-handoff'
+                skill.mkdir(parents=True);(skill/'SKILL.md').write_text('x')
+                self.assertEqual(find_skill(binding,root/'project'),'someone-handoff')
+                self.assertIn('someone-handoff',skill_hint(binding,root/'project'))
+                codex = Binding('codex','s',str(root/'account'),'p','t','w','h',1,'1')
+                self.assertIsNone(find_skill(codex,root/'project'))
+
+    def test_claude_init_needs_command_then_finished_reply(self):
+        from left_undone.renewal import claude_init_done
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder)/'c.jsonl'
+            init = {'type':'user','message':{'content':'<command-name>/init</command-name>'}}
+            reply = {'type':'assistant','message':{'stop_reason':'end_turn','content':[]}}
+            path.write_text(json.dumps(reply)+'\n'+json.dumps(init)+'\n')
+            self.assertFalse(claude_init_done(path))
+            path.write_text(json.dumps(init)+'\n'+json.dumps(reply)+'\n')
+            self.assertTrue(claude_init_done(path))
+
+    def test_default_claude_account_launches_without_config_dir(self):
+        # CLAUDE_CONFIG_DIR=~/.claude makes Claude read ~/.claude/.claude.json instead of
+        # ~/.claude.json, losing folder trust and user MCP servers.
+        from left_undone.renewal import account_env
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            with patch('pathlib.Path.home',return_value=home):
+                self.assertEqual(account_env('claude',str(home/'.claude')),([],['-u','CLAUDE_CONFIG_DIR']))
+                other = str(home/'work-claude')
+                self.assertEqual(account_env('claude',other),(['--env','CLAUDE_CONFIG_DIR='+other],[]))
+                self.assertEqual(account_env('codex',str(home/'.codex')),
+                                 (['--env','CODEX_HOME='+str(home/'.codex')],[]))

@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from . import dispatch
-from .language import load_language, preference_root, tr
+from .language import decimal, load_language, preference_root, tr
 from .runtime import herdr, resolve_history
 from .ui import configure, put
 from .ui_layout import Layout, MouseInput, cell_width, fit, wrap_text
@@ -41,6 +41,35 @@ def read_usage(path, cache):
 
 
 DEFAULT_BUDGET = 500_000
+CLAUDE_WINDOW = 200_000
+CLAUDE_LARGE_WINDOW = 1_000_000
+
+
+def abbreviate(number):
+    """950 -> 950, 12400 -> 12.4k, 254160 -> 254k, 23114025 -> 23.1M."""
+    for size, unit in ((1_000_000, 'M'), (1_000, 'k')):
+        if number >= size:
+            value = number / size
+            text = f'{value:.1f}'.rstrip('0').rstrip('.') if value < 100 else str(round(value))
+            return decimal(text) + unit
+    return str(number)
+
+
+def context_window(root):
+    """User override for the Claude context window, or None for automatic."""
+    try:
+        value = int((root / 'context-window').read_text())
+        return value if 0 < value <= 999_999_999_999 else None
+    except (OSError, ValueError):
+        return None
+
+
+def claude_window(context, model, override=None):
+    if override:
+        return override
+    if (context or 0) > CLAUDE_WINDOW or '1m' in (model or '').lower():
+        return CLAUDE_LARGE_WINDOW
+    return CLAUDE_WINDOW
 
 
 def token_budget(root):
@@ -51,12 +80,12 @@ def token_budget(root):
         return DEFAULT_BUDGET
 
 
-def edit_budget(win, root, current):
-    digits = str(current)
+def edit_budget(win, root, current, name='token-budget', title='Token reference per agent'):
+    digits = str(current or '')
     replace = True
     while True:
         win.erase()
-        put(win, 0, tr('Token reference per agent'))
+        put(win, 0, tr(title))
         put(win, 1, digits)
         put(win, 2, tr('Enter Save · Esc Cancel'))
         win.refresh()
@@ -66,10 +95,13 @@ def edit_budget(win, root, current):
             continue
         if key == '\x1b':
             return current
+        if key in ('\r', '\n', curses.KEY_ENTER) and not digits and name == 'context-window':
+            (root/name).unlink(missing_ok=True)
+            return None
         if key in ('\r', '\n', curses.KEY_ENTER) and digits and int(digits) > 0:
             with NamedTemporaryFile('w', dir=root, delete=False) as temp:
                 temp.write(digits+'\n')
-            Path(temp.name).replace(root/'token-budget')
+            Path(temp.name).replace(root/name)
             return int(digits)
         if key in ('\x7f', '\b', curses.KEY_BACKSPACE):
             digits = digits[:-1]
@@ -80,11 +112,16 @@ def edit_budget(win, root, current):
 
 
 def claude_total(path, cache, session):
+    return claude_usage(path, cache, session)[1]
+
+
+def claude_usage(path, cache, session):
+    """(current context, cumulative total, model) of a Claude session."""
     stat = path.stat()
     identity = (stat.st_dev, stat.st_ino)
-    previous, offset, messages, total = cache.get(path, (None, 0, {}, 0))
+    previous, offset, messages, total, context, model = cache.get(path, (None, 0, {}, 0, None, None))
     if previous != identity or stat.st_size < offset:
-        offset, messages, total = 0, {}, 0
+        offset, messages, total, context, model = 0, {}, 0, None, None
     with path.open('rb') as stream:
         stream.seek(offset)
         for line in stream:
@@ -104,8 +141,10 @@ def claude_total(path, cache, session):
                         'cache_creation_input_tokens','cache_read_input_tokens'))
             total += count - messages.get(mid,0)
             messages[mid] = count
-    cache[path] = identity, offset, messages, total
-    return total if messages else None
+            context = count - (usage.get('output_tokens',0) or 0)
+            model = message.get('model') or model
+    cache[path] = identity, offset, messages, total, context, model
+    return (context, total, model) if messages else (None, None, None)
 
 
 def agent_info(pane, terminal):
@@ -117,7 +156,8 @@ def agent_info(pane, terminal):
     return tr({'working':'Working','idle':'Idle','done':'Idle','blocked':'Blocked'}.get(status,'Unknown'))
 
 
-def describe(row, pane, binding, paths, cache):
+def describe(row, pane, binding, paths, cache, window=None):
+    """State and usage {'context','window','total'} of one monitored agent."""
     state = agent_info(pane, row['terminal'])
     if row['main'] and pane and pane.get('agent') and pane['agent'] != binding.kind:
         state = tr('Session changed')
@@ -129,9 +169,12 @@ def describe(row, pane, binding, paths, cache):
                 if sid not in paths:
                     paths[sid] = resolve_history(binding.kind,binding.account,sid)
                 if binding.kind == 'codex':
-                    total = read_usage(paths[sid],cache)[2]
+                    context, size, spent = read_usage(paths[sid],cache)
                 else:
-                    total = claude_total(paths[sid],cache,sid)
+                    context, spent, model = claude_usage(paths[sid],cache,sid)
+                    size = claude_window(context, model, window) if context is not None else None
+                if spent is not None or context is not None:
+                    total = {'context':context,'window':size,'total':spent}
             except (OSError,ValueError,RuntimeError,subprocess.TimeoutExpired):
                 pass
         elif row['main'] and sid != binding.session:
@@ -139,15 +182,22 @@ def describe(row, pane, binding, paths, cache):
     return state, total
 
 
-def usage_meter(total, budget):
-    if total is None:
-        return tr('Tokens')+' · '+tr('No data')
-    remaining = max(0, budget-total)
-    percent = 100*remaining/budget
-    filled = round(10*remaining/budget)
-    label = '<1' if 0 < percent < 1 else str(round(percent))
-    number = f'{total:,}'.replace(',',tr(','))
-    return tr('{0} tokens used').format(number)+' · '+'▰'*filled+'▱'*(10-filled)+' '+tr('{0}% left').format(label)
+def usage_meter(usage):
+    """'254k / 1M context used · ▰▰▰▱▱▱▱▱▱▱ 25% · 23.1M total'."""
+    if not usage:
+        return tr('Context')+' · '+tr('No data')
+    parts = []
+    context, window = usage.get('context'), usage.get('window')
+    if context is not None and window:
+        share = min(1, context/window)
+        percent = 100*share
+        label = '<1' if 0 < percent < 1 else str(round(percent))
+        filled = min(10, round(10*share))
+        parts.append(tr('{0} / {1} context used').format(abbreviate(context), abbreviate(window)))
+        parts.append('▰'*filled+'▱'*(10-filled)+' '+label+'%')
+    if usage.get('total') is not None:
+        parts.append(tr('{0} total').format(abbreviate(usage['total'])))
+    return ' · '.join(parts) or tr('Context')+' · '+tr('No data')
 
 
 def state_cell(state):
@@ -163,7 +213,7 @@ def state_style(state):
     return 'normal'
 
 
-def monitor_lines(rows, width, targets=None, budget=DEFAULT_BUDGET):
+def monitor_lines(rows, width, targets=None):
     """Build physical lines at the current width before applying vertical scrolling."""
     width = max(1,width)
     lines = []
@@ -193,7 +243,7 @@ def monitor_lines(rows, width, targets=None, budget=DEFAULT_BUDGET):
             lines.append([(0,part+' '*(width-cell_width(part)),'band')])
         address = ' / '.join(filter(None,(row['tab'],row['pane'])))
         text(state_cell(state)+'   '+address,state_style(state))
-        text(usage_meter(total,budget),'context')
+        text(usage_meter(total),'context')
         lines.append([])
 
     text(tr('Sub-agents').upper()+'  '+str(len(jobs)),'heading')
@@ -215,7 +265,7 @@ def monitor_lines(rows, width, targets=None, budget=DEFAULT_BUDGET):
             text(address,'dim')
             text(tr('Agent')+'  '+state_cell(state),state_style(state))
             text(tr('Delivery')+'  '+delivery)
-        text(usage_meter(total,budget),'context')
+        text(usage_meter(total),'context')
         text(task,'dim')
         verdict = row.get('verdict')
         pending = row.get('attempt') and not verdict
@@ -268,7 +318,7 @@ def monitor(win, binding, db):
     error = ''
     notice = ''
     mouse = MouseInput()
-    budget = token_budget(preference_root())
+    window = context_window(preference_root())
     selected = retry = None
     while True:
         if time.monotonic() >= refresh:
@@ -287,7 +337,7 @@ def monitor(win, binding, db):
                 main['label'] = labels.get(main['tab'],main['tab'])
                 for job in jobs:
                     job['label'] = labels.get(job['tab']) or f"Dispatch · {job['item']}"
-                rows = [(row,*describe(row,live.get(row['pane']),binding,paths,cache)) for row in [main,*jobs]]
+                rows = [(row,*describe(row,live.get(row['pane']),binding,paths,cache,window)) for row in [main,*jobs]]
                 error = ''
             except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as exc:
                 error = str(exc)
@@ -296,15 +346,16 @@ def monitor(win, binding, db):
         win.erase()
         width=max(1,w-1)
         targets = {}
-        lines=monitor_lines(rows,width,targets,budget)
-        totals=[value for row,_,value in rows if not row['main']]
+        lines=monitor_lines(rows,width,targets)
+        totals=[(value or {}).get('total') for row,_,value in rows if not row['main']]
         if any(value is not None for value in totals):
             label=tr('Cumulative dispatch tokens') if None not in totals else tr('Known cumulative dispatch tokens')
             total=sum(value for value in totals if value is not None)
-            footer=wrap_text(f'{label}  {total:,}',width)
+            footer=wrap_text(f'{label}  {abbreviate(total)}',width)
         else:
             footer=[]
-        footer.append(tr('[B] Reference per agent')+' '+f'{budget:,}'.replace(',',tr(',')))
+        if binding.kind == 'claude':
+            footer.append(tr('[B] Claude context window')+' '+(abbreviate(window) if window else tr('automatic')))
         if notice:
             footer = wrap_text(notice,width) + footer
         if error:
@@ -337,9 +388,10 @@ def monitor(win, binding, db):
         win.refresh()
         try:key=win.get_wch()
         except curses.error:continue
-        if key in ('B','b'):
+        if key in ('B','b') and binding.kind == 'claude':
             try:
-                budget = edit_budget(win,preference_root(),budget)
+                window = edit_budget(win,preference_root(),window,'context-window',
+                                     'Claude context window (empty = automatic)')
             except OSError as exc:
                 notice = str(exc)
             continue

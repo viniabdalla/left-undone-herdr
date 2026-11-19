@@ -9,9 +9,19 @@ Use this skill when someone asks for the open tasks panel in Herdr. It requires 
 
 Resolve `scripts/left-undone` relative to this SKILL.md. The wrapper uses the plugin implementation and shares its collector.
 
+## Open the current conversation (default for a skill call)
+
+When the user invokes this skill inside a conversation, open the panel of **that** conversation:
+
+```sh
+python3 scripts/left-undone open --current
+```
+
+It identifies the conversation by the verified agent process that runs the command (falling back to an exact `CODEX_THREAD_ID` match) and opens the panel in a split beside it. It never opens a picker and never imports anything. If the repo has saved tasks, the panel says how many and the user can import them later with key 4. Use the steps below only when `--current` cannot identify the conversation or the user asks for another one.
+
 ## Choose a conversation
 
-The installer also places `left-undone` in `~/.local/bin`. With no arguments, it always opens the global picker of verifiable Herdr conversations, regardless of the current directory or how many sessions are available. The picker shows titles, IDs, accounts and open item counts. In a terminal it stays open until the user makes a choice or presses Esc. Agent tools without a TTY open it in a regular Herdr split.
+The installer also places `left-undone` in `~/.local/bin`. With no arguments, it opens the picker of verifiable conversations in the current Herdr workspace. Conversations of other workspaces never appear. Each conversation is a two-line block: title, then agent, account and open item count, with the pane ID on the right. In a terminal it stays open until the user makes a choice or presses Esc. Agent tools without a TTY open it in a regular Herdr split. When opened from Herdr, the chosen panel replaces the picker in the same pane and first offers the repo's saved tasks for selective import (Esc skips).
 
 Use `left-undone open --repo <directory>` to explicitly filter by project. A single verifiable match opens directly. `left-undone open` uses the global picker. The filter uses the session history’s initial directory, resolved to the Git root, or the exact directory outside Git. Worktrees remain separate. Saved conversations without a live session must be resumed in the agent.
 
@@ -19,7 +29,7 @@ The directory determines the project exchange file and filters candidates. Openi
 
 1. Run `python3 scripts/left-undone list`. The result lists verifiable panes, session UUIDs, accounts and transcripts, and explains unavailable sessions.
 2. Once the requested conversation is unambiguous, run `scripts/left-undone open --pane <pane> --session <UUID>`. Otherwise, run `scripts/left-undone open` and let the user choose. Visual focus, the working directory and an inherited `HERDR_PANE_ID` are insufficient to identify the recipient. Do not substitute another conversation.
-3. A new panel opens in a right-hand split and preserves the existing focus. Reopening an existing panel focuses it even in another tab. Its collector reads only the bound conversation’s transcript.
+3. A new panel opens in a right-hand split and preserves the existing focus. Reopening focuses the existing panel when it is in the conversation's tab, and otherwise reopens it beside the conversation. Its collector reads only the bound conversation’s transcript.
 
 ## Project lists
 
@@ -35,7 +45,7 @@ Never use `--project` to guess a recipient. Change another conversation’s asso
 
 ## Panel controls
 
-Click any line of a task or press its letter to toggle selection. Send and Complete show the selection count. The mouse wheel, arrow keys and page buttons change pages. Long text wraps to the panel width and tall items continue onto the next page. Export, Import and Close are clickable. In the conversation picker, click a row and then Open.
+Click any line of a task or press its letter to toggle selection. Send and Complete show the selection count. The mouse wheel, arrow keys and the page buttons beside the task counter change pages. Long text wraps to the panel width and tall items continue onto the next page. Export, Import and Close are clickable. In the conversation picker, click a row and then Open.
 
 - **1** sends the selected items to the linked conversation. They remain open.
 - **2** asks for confirmation before marking items complete. Press `1` or click Confirm to complete the displayed selection. Press `2`, click Cancel, or press Esc to return to the same selection and page. Editing, completing or deselecting an item during confirmation invalidates the request. Automatic curation operates independently.
@@ -43,7 +53,8 @@ Click any line of a task or press its letter to toggle selection. Send and Compl
 - **5** requests an immediate round from the active collector, including during the retry delay after an error. Repeated requests are combined and wait for any analysis already in progress. The collector still verifies the session and skips previously processed events. Automatic collection continues.
 - **6** switches between newest first and oldest first. **7** toggles read-only session history. **8** chooses the project for Export and Import. These changes return to the first page and preserve selections. The header always identifies the verified recipient.
 - **9** switches the interface between English and Portuguese and saves the choice locally.
-- **Esc** closes the panel. State and selections are saved.
+- **Esc** or the discreet **Close** at the top right asks before closing: export the open tasks and close, close without exporting, or go back. State and selections are saved.
+- **M** opens the agents monitor in a split below the panel, or focuses it.
 
 Project panels group highlighted titles and descriptions under **For the agent** and **For you**. Other projects’ and conversations’ private promises stay hidden. History shows documented closure reasons or “Closed” for ambiguous records. Known dates appear beside items, with a single notice for missing historical dates. Never invent a date or a reason for closure.
 
@@ -96,12 +107,12 @@ If the plugin is missing on this machine and installation is authorized, run `py
 
 ## Dispatch a sub-agent
 
-Select one task and click **Dispatch Sub-Agent** (key 0). The parent agent reviews its own conversation for relevant context. If a decision is missing, use the supplied question callback and ask the user before opening a tab. Otherwise choose both the model and effort, then use the supplied dispatch command with a self-contained brief on stdin. It returns the tab, pane and worktree. New Codex workers start with approvals and sandboxing disabled. New Claude workers start in the `bypassPermissions` mode. The worker uses the report command in its initial prompt to send its summary, verification and outstanding work back to the panel. Report blocked when user input is needed. Press R in the original panel to read dispatch reports.
+Select one or more tasks and press **Dispatch** (key 0). With several, the panel asks: **Separate** (one tab per task) or **Together** (one tab, one brief covering all of them); all tickets go to the parent in one message, and the parent runs each ticket command once. The parent agent reviews its own conversation for relevant context. If a decision is missing, use the supplied question callback and ask the user before opening a tab. Otherwise choose both the model and effort, then use the supplied dispatch command with a self-contained brief on stdin. It returns the tab, pane and worktree. New Codex workers start with approvals and sandboxing disabled. New Claude workers start in the `bypassPermissions` mode. The worker uses the report command in its initial prompt to send its summary, verification and outstanding work back to the panel. Report blocked when user input is needed. Press R in the original panel to read dispatch reports.
 
 Use **Review** (uppercase V) to check the selected tasks, or all open tasks if none are selected. A small model checks for delivery, closes completed tasks and sends the remaining work to the linked main session. The report shows the result of each handoff. **Collect** (5) requests the usual incremental collection.
 
-## Renew a Codex session or dispatch a plan
+## Hand off a session or dispatch a plan
 
-Press **H** in a Codex project panel to export its open tasks and request a local handoff. Update TODO.md using the worktree’s instructions and preserve its consumer’s format. Evaluate commit and push using the repository policy and the user’s authorization. Return the saved handoff reference on the requested receipt line. The panel opens a successor in a split, runs /init, verifies the successor, restores the handoff and imports the exported tasks in the same Left Undone panel. Close the old Codex pane only when the panel confirms the new connection. When the active thread and displayed list differ, H asks for explicit confirmation before carrying the displayed tasks. If a step needs attention, answer in the linked conversation and use H to continue the pending transition.
+Press **H** in a project panel (Codex or Claude). The panel exports the open tasks and asks the session to do a handoff following the project's local settings, naming an installed handoff skill only when one exists. Answer it with the local procedure and end with the requested receipt line. The panel then opens the same agent in a new tab, runs /init, asks the successor to restore the handoff, imports the exported tasks and binds the same panel to the successor. Close the old pane only when the panel confirms the new connection. If a step needs attention, answer in the linked conversation and use H to continue the pending transition.
 
-For a planning dispatch, select one item and press **P**. Prepare a planning-only brief for the native Codex or Claude planner. Read the proposal with **R**. Selecting **0** on that item starts a separate execution dispatch and includes the proposed plan for review by the parent.
+For a planning dispatch, select items and press **P** (same Separate or Together choice). Prepare a planning-only brief for the native Codex or Claude planner. Read the proposal with **R**. Selecting **0** on that item starts a separate execution dispatch and includes the proposed plan for review by the parent.

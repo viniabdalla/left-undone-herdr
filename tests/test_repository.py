@@ -88,10 +88,12 @@ class RepositoryTests(unittest.TestCase):
         opened,api,out=self.run_cli(['open','--repo',str(self.repo)],[self.binding(cwd=self.other)])
         opened.assert_not_called();api.assert_not_called();self.assertIn('No active session',out)
 
-    def run_cli(self,args,bindings,tty=False):
+    def run_cli(self,args,bindings,tty=False,env=None):
         output=io.StringIO()
         output.isatty=lambda:tty
-        with patch('sys.stdin.isatty',return_value=tty),patch('sys.argv',['left-undone',*args]),patch('left_undone.app.candidates',return_value=(bindings,[])),patch('left_undone.app.state_root',return_value=self.state),patch('left_undone.app.open_panel',return_value={'reused':True}) as opened,patch('left_undone.app.herdr',return_value={'ok':True}) as api,contextlib.redirect_stdout(output):
+        outside={k:v for k,v in os.environ.items() if not k.startswith('HERDR_')}
+        outside.update(env or {})
+        with patch.dict(os.environ,outside,clear=True),patch('sys.stdin.isatty',return_value=tty),patch('sys.argv',['left-undone',*args]),patch('left_undone.app.candidates',return_value=(bindings,[])),patch('left_undone.app.state_root',return_value=self.state),patch('left_undone.app.open_panel',return_value={'reused':True}) as opened,patch('left_undone.app.herdr',return_value={'ok':True}) as api,contextlib.redirect_stdout(output):
             app.main()
         return opened,api,output.getvalue()
 
@@ -117,6 +119,20 @@ class RepositoryTests(unittest.TestCase):
             opened,api,_=self.run_cli(['open','--repo',str(self.sub)],[a,b],tty=True)
         api.assert_not_called();opened.assert_not_called()
         self.assertEqual(wrapper.call_args.args[1],[a,b])
+
+    def test_picker_lists_only_conversations_of_current_workspace(self):
+        here=self.binding();there=self.binding('s2')
+        there=Binding(**{**asdict(there),'workspace':'w9','pane':'w9:p1'})
+        context=json.dumps({'workspace_id':here.workspace,'workspace_label':'repo','workspace_cwd':str(self.repo)})
+        with patch('left_undone.app.curses.wrapper') as wrapper:
+            self.run_cli(['pick'],[here,there],env={'HERDR_PLUGIN_CONTEXT_JSON':context})
+        self.assertEqual(wrapper.call_args.args[1],[here])
+        self.assertIn('repo',wrapper.call_args.kwargs['heading'])
+
+    def test_current_opens_conversation_that_runs_the_command(self):
+        mine=Binding(**{**asdict(self.binding()),'pid':os.getppid()});other=self.binding('s2')
+        opened,_,_=self.run_cli(['open','--current'],[other,mine])
+        opened.assert_called_once_with(mine)
 
     def test_global_open_in_terminal_chooses_inline(self):
         with patch('left_undone.app.curses.wrapper') as wrapper:

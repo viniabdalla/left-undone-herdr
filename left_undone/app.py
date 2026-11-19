@@ -39,7 +39,7 @@ def panel_process_alive(pane, binding_file):
         try:
             proc=Path('/proc')/str(process['pid'])
             env=dict(x.split('=',1) for x in (proc/'environ').read_bytes().decode().split('\0') if '=' in x)
-            if env.get('LEFT_UNDONE_BINDING')==str(binding_file) and env.get('HERDR_PLUGIN_ENTRYPOINT_ID')=='panel':
+            if env.get('LEFT_UNDONE_BINDING')==str(binding_file) and env.get('HERDR_PLUGIN_ENTRYPOINT_ID') in ('panel','picker'):
                 return True
         except (OSError,ValueError,UnicodeError):pass
     return False
@@ -55,7 +55,7 @@ def wait_collector(root,key):
         raise RuntimeError(tr('The previous collector is stopping. Try reopening in a moment.'))
 
 
-def open_panel(binding,project=None):
+def open_panel(binding,project=None,offer_import=False):
     verify(binding)
     root=state_root()
     db=project_store(root,binding,project)
@@ -72,7 +72,12 @@ def open_panel(binding,project=None):
                 previous=json.loads(file.read_text()) if file.exists() else {}
                 same=previous==asdict(binding) and old.get('project')==project
                 starting=time.time()-old.get('created',0)<15
-                if same and (starting or panel_process_alive(old['pane'],file)):
+                # A panel left in another tab (the conversation was moved or a
+                # new tab was opened) is invisible from the conversation, so
+                # reopen it beside the conversation instead of focusing it.
+                try:beside=herdr('pane','current','--pane',binding.pane)['pane'].get('tab_id')==live.get('tab_id')
+                except RuntimeError:beside=True
+                if same and beside and (starting or panel_process_alive(old['pane'],file)):
                     herdr('plugin','pane','focus',old['pane'])
                     return {'reused':True,'pane':old['pane']}
                 herdr('plugin','pane','close',old['pane'])
@@ -80,12 +85,78 @@ def open_panel(binding,project=None):
         atomic_json(file,asdict(binding))
         result=herdr('plugin','pane','open','--plugin',PLUGIN,'--entrypoint','panel','--placement','split',
                      '--target-pane',binding.pane,'--direction','right','--no-focus',
-                     '--env','LEFT_UNDONE_BINDING='+str(file),'--env','LEFT_UNDONE_STATE_DIR='+str(root))
+                     '--env','LEFT_UNDONE_BINDING='+str(file),'--env','LEFT_UNDONE_STATE_DIR='+str(root),
+                     *(['--env','LEFT_UNDONE_OFFER_IMPORT=1'] if offer_import else []))
         info=result.get('plugin_pane',result).get('pane')
         if not info:raise RuntimeError(tr('Herdr opened panel but returned unexpected format; do not repeat without checking'))
         record={'pane':info['pane_id'],'terminal':info['terminal_id'],'created':time.time(),'project':project}
         atomic_json(mapping,record)
         return record
+
+
+def open_here(binding,pane):
+    """Prepare the panel to replace the picker in this same Herdr pane."""
+    verify(binding)
+    root=state_root()
+    db=project_store(root,binding)
+    project=getattr(db,'project',None);db.close()
+    terminal=herdr('pane','current','--pane',pane)['pane']['terminal_id']
+    with (root/(binding.key+'.open.lock')).open('w') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX)
+        mapping=root/(binding.key+'.pane.json')
+        file=root/(binding.key+'.binding.json')
+        if mapping.exists():
+            old=json.loads(mapping.read_text())
+            if old.get('pane')!=pane:
+                try:live=herdr('pane','current','--pane',old['pane'])['pane']
+                except RuntimeError:live={}
+                if live.get('terminal_id')==old.get('terminal'):
+                    herdr('plugin','pane','close',old['pane'])
+                    wait_collector(root,binding.key)
+        atomic_json(file,asdict(binding))
+        atomic_json(mapping,{'pane':pane,'terminal':terminal,'created':time.time(),'project':project})
+    return file
+
+
+def current_workspace():
+    """The Herdr workspace this command runs in, with a readable heading."""
+    try:context=json.loads(os.environ.get('HERDR_PLUGIN_CONTEXT_JSON') or '{}')
+    except ValueError:context={}
+    workspace=context.get('workspace_id') or os.environ.get('HERDR_WORKSPACE_ID')
+    if not workspace:return None,None,None
+    label=context.get('workspace_label') if context.get('workspace_id')==workspace else None
+    folder=context.get('workspace_cwd') if context.get('workspace_id')==workspace else None
+    try:
+        info=herdr('workspace','get',workspace)['workspace']
+        label=info.get('label') or label
+        folder=(info.get('worktree') or {}).get('checkout_path') or folder
+    except (RuntimeError,KeyError):pass
+    heading=tr('Workspace: ')+(label or workspace)
+    if folder:
+        path=Path(folder)
+        try:shown='~/'+str(path.relative_to(Path.home())) if path!=Path.home() else '~'
+        except ValueError:shown=str(path)
+        if path.name!=label or path==Path.home():heading+=' · '+shown
+        else:heading=tr('Workspace: ')+shown
+    suffix=Path(folder).name if folder else label
+    return workspace,heading,suffix
+
+
+def current_conversation(bindings):
+    """The verified conversation that runs this command (skill call)."""
+    pids=[];pid=os.getpid()
+    for _ in range(64):
+        try:pid=int((Path('/proc')/str(pid)/'stat').read_text().split(') ',1)[1].split()[1])
+        except (OSError,ValueError,IndexError):break
+        if pid<=1:break
+        pids.append(pid)
+    for pid in pids:
+        matches=[b for b in bindings if b.pid==pid]
+        if len(matches)==1:return matches[0]
+    thread=os.environ.get('CODEX_THREAD_ID')
+    matches=[b for b in bindings if thread and b.kind=='codex' and b.session==thread]
+    if len(matches)==1:return matches[0]
+    raise RuntimeError(tr('Could not identify the current conversation. Run left-undone list and open --pane --session.'))
 
 
 def collect(binding,root):
@@ -151,6 +222,7 @@ def main():
     parser.add_argument('--confirm-source',help=argparse.SUPPRESS)
     parser.add_argument('--marker',help=tr('Fresh commentary marker used to recover the Codex session'))
     parser.add_argument('--project',type=Path,help=tr('Link this conversation explicitly to the project (open --pane --session)'))
+    parser.add_argument('--current',action='store_true',help=tr('Open the panel of the conversation running this command'))
     parser.add_argument('--repo',type=Path,help=tr('Filter sessions by Git root of this folder (without Git: exact folder)'))
     args=parser.parse_args()
     if args.import_ids and (args.command != 'import' or args.file):
@@ -189,8 +261,28 @@ def main():
                     if args.command=='open':
                         print('\n'.join(notes+errors));return
                 errors=notes+errors
+            if args.current:
+                if args.command!='open' or args.pane or args.session or repo is not None:
+                    raise RuntimeError(tr('--current requires open without --pane, --session or --repo'))
+                print(json.dumps(open_panel(current_conversation(bs))));return
+            heading=suffix=None
+            if repo is None and not (args.pane or args.session):
+                workspace,heading,suffix=current_workspace()
+                if workspace:
+                    bs=[b for b in bs if b.workspace==workspace]
+                    errors=[e for e in errors if e.startswith(workspace+':')]
             if args.command=='pick':
-                curses.wrapper(picker,bs,errors,open_panel,counts=pending_counts(root,bs),titles=titles);return
+                pane=os.environ.get('HERDR_PANE_ID')
+                here=os.environ.get('HERDR_PLUGIN_ENTRYPOINT_ID')=='picker' and pane
+                choose=(lambda b:open_here(b,pane)) if here else (lambda b:open_panel(b,offer_import=True))
+                chosen=curses.wrapper(picker,bs,errors,choose,counts=pending_counts(root,bs),titles=titles,heading=heading,suffix=suffix)
+                if here and chosen:
+                    try:herdr('pane','rename',pane,'Left Undone')
+                    except RuntimeError:pass
+                    os.environ['LEFT_UNDONE_BINDING']=str(chosen)
+                    os.environ['LEFT_UNDONE_OFFER_IMPORT']='1'
+                    os.execv(sys.executable,[sys.executable,sys.argv[0],'panel','--binding',str(chosen)])
+                return
             if args.pane and args.session:
                 matches=[b for b in bs if b.pane==args.pane and b.session==args.session]
                 if len(matches)!=1:raise RuntimeError(tr('Unverified pane/session: ')+'; '.join(errors))
@@ -199,7 +291,8 @@ def main():
             if repo is not None and len(bs)==1:
                 print(json.dumps(open_panel(bs[0])));return
             if sys.stdin.isatty() and sys.stdout.isatty():
-                curses.wrapper(picker,bs,errors,open_panel,counts=pending_counts(root,bs),titles=titles);return
+                curses.wrapper(picker,bs,errors,lambda b:open_panel(b,offer_import=True),counts=pending_counts(root,bs),
+                               titles=titles,heading=heading,suffix=suffix);return
             # Agent tools have no interactive terminal. Keep their selector inside
             # Herdr too, as a regular split instead of a client popup.
             print(json.dumps(herdr('plugin','pane','open','--plugin',PLUGIN,'--entrypoint','picker','--placement','split','--direction','right',

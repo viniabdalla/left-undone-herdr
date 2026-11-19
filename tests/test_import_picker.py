@@ -48,15 +48,15 @@ class ImportPickerTests(unittest.TestCase):
             if session == 'source':
                 store.add('task', 'First')
                 store.add('promise', 'Second')
-                keys = ['3', '\x1b']
+                keys = ['3', '\x1b', '2']
             else:
                 self.assertEqual(store.items(), [])
-                keys = ['4', 'b', '1', '4', '\x1b', '\x1b']
+                keys = ['4', 'b', '1', '4', '\x1b', '\x1b', '2']
             window = Window(keys)
             with patch.object(ui, 'subprocess', Mock(Popen=Mock(return_value=Worker()))):
                 ui.panel(window, binding, self.root, self.root/'binding.json')
         self.assertEqual([item['text'] for item in store.items()], ['Second'])
-        self.assertIn('Already imported · Second', window.frames[-2])
+        self.assertIn('Already imported · Second', window.frames[-3])
 
     def test_project_switch_export_import_and_failure_leave_session_linked(self):
         binding = Binding('codex', 'linked', str(self.root), 'w0:p0', 'none', 'w0', 'none', 1, '1')
@@ -65,12 +65,12 @@ class ImportPickerTests(unittest.TestCase):
         other = ProjectStore(self.root/'state.db', 'other', '/b')
         self.addCleanup(other.close)
         other.add('task', 'Not exported')
-        keys = ['8', curses.KEY_DOWN, '\n', '3', '4', 'b', '\x1b', '4', 'b', '1', '4', '\x1b']
+        keys = ['8', curses.KEY_DOWN, '\n', '3', '4', 'b', '\x1b', '4', 'b', '1', '4', '\x1b', '2']
         window = Window(keys)
         path = self.root/'tasks.json'
         with patch.object(ui.subprocess, 'Popen', return_value=Worker()), \
              patch.object(ui, 'export_project', return_value=path) as export, \
-             patch.object(ui, 'import_choices', side_effect=[self.choices, self.choices, ValueError('Invalid file')]), \
+             patch.object(ui, 'import_choices', side_effect=[self.choices, self.choices, self.choices, ValueError('Invalid file')]), \
              patch.object(ui, 'import_selected', return_value=1) as confirm:
             ui.panel(window, binding, self.root, self.root/'binding.json')
         target, project = export.call_args.args

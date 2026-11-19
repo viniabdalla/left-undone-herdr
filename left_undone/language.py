@@ -94,3 +94,8 @@ def collector_status(text):
     if _ENGLISH.get(text, text) == 'Curation up to date':
         return tr('Collector active')
     return stored_label(text)
+
+
+def decimal(text):
+    """Use the interface language's decimal separator in a short number."""
+    return text.replace('.', ',') if _language == 'pt' else text

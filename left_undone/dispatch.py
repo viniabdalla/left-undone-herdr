@@ -44,8 +44,12 @@ def setup(conn):
     ''')
     with conn:
         conn.execute('BEGIN IMMEDIATE')
-        if 'plan' not in {c[1] for c in conn.execute('PRAGMA table_info(dispatches)')}:
+        columns = {c[1] for c in conn.execute('PRAGMA table_info(dispatches)')}
+        if 'plan' not in columns:
             conn.execute('ALTER TABLE dispatches ADD COLUMN plan INTEGER NOT NULL DEFAULT 0')
+        if 'members' not in columns:
+            # JSON [[item id, text], ...] when one dispatch carries several tasks.
+            conn.execute('ALTER TABLE dispatches ADD COLUMN members TEXT')
 
 
 def records(conn, session, *, latest=False):
@@ -121,45 +125,144 @@ def source_cwd(binding):
     return str(project_root(cwd))
 
 
-def request(store, binding, root, *, plan=False):
+ACTIVE = ('review','question','launch','running','blocked')
+
+
+def members(job):
+    """The (item id, text) pairs a dispatch carries; one for a classic dispatch."""
+    try:
+        value = job['members']
+    except (IndexError, KeyError):
+        value = None
+    return [tuple(pair) for pair in json.loads(value)] if value else [(job['item'], job['task'])]
+
+
+def combined_task(pairs):
+    return pairs[0][1] if len(pairs) == 1 else '\n'.join('- ' + text for _, text in pairs)
+
+
+def request(store, binding, root, *, plan=False, together=False):
+    """Dispatch the selected tasks: one tab per task, or all of them in one tab."""
     chosen = [i for i in store.items() if i['selected']]
-    if len(chosen) != 1:
-        raise ValueError(tr('Select one task to dispatch'))
-    item, = chosen
+    if not chosen:
+        raise ValueError(tr('Select at least one task to dispatch'))
+    groups = [chosen] if together else [[item] for item in chosen]
     cwd = source_cwd(binding)
-    ticket, receipt = secrets.token_hex(20), secrets.token_hex(20)
+    tickets = []
     with store.conn:
-        try:
-            store.conn.execute('INSERT INTO dispatches(parent,item,task,ticket,receipt,binding,cwd,plan,state) '
-                               "VALUES(?,?,?,?,?,?,?,?,'review')",
-                               (binding.key, item['id'], item['text'], ticket, receipt, json.dumps(asdict(binding)), cwd, plan))
-        except sqlite3.IntegrityError as e:
-            raise ValueError(tr('This task already has an active dispatch')) from e
-    cmd = callback(root, 'dispatch', ticket)
-    prompt = f"""Prepare a Left Undone dispatch for this selected task in {cwd}:
-{item['text']}
-You own the context review. If a user decision is needed, write the question to stdin of
-{cmd} --question and ask here. After clarification, continue with this same ticket.
-When ready, choose the worker model AND reasoning effort appropriate for this task and your CLI.
-Run {cmd} --model MODEL --effort LEVEL with the standalone brief on stdin (use a quoted heredoc).
-Include relevant context, files, scope, acceptance checks and reporting language. Delegate only this task.
-The command opens a new Herdr tab in the same worktree, starts a fresh session and returns its tab and pane.
-Tell the user where it is. The worker reports progress and results directly to this panel."""
-    if plan:
-        prompt += "\nThis is a planning dispatch. Prepare a brief for a plan only. Leave implementation for approval."
-    else:
-        previous = store.conn.execute(
-            "SELECT summary FROM dispatches WHERE parent=? AND item=? AND task=? AND state='planned' "
-            "ORDER BY updated DESC,rowid DESC LIMIT 1", (binding.key, item['id'], item['text'])).fetchone()
-        if previous:
-            prompt += "\nThe user selected execution. Include this proposed plan in the worker brief:\n" + previous[0]
+        store.conn.execute('BEGIN IMMEDIATE')
+        busy = set()
+        for job in store.conn.execute('SELECT item,task,members FROM dispatches WHERE parent=? AND state IN (?,?,?,?,?)',
+                                      (binding.key, *ACTIVE)):
+            busy.update(item for item, _ in members(job))
+        if any(item['id'] in busy for item in chosen):
+            raise ValueError(tr('This task already has an active dispatch'))
+        for group in groups:
+            pairs = [(item['id'], item['text']) for item in group]
+            ticket, receipt = secrets.token_hex(20), secrets.token_hex(20)
+            try:
+                store.conn.execute('INSERT INTO dispatches(parent,item,task,ticket,receipt,binding,cwd,plan,members,state) '
+                                   "VALUES(?,?,?,?,?,?,?,?,?,'review')",
+                                   (binding.key, pairs[0][0], combined_task(pairs), ticket, receipt,
+                                    json.dumps(asdict(binding)), cwd, plan, json.dumps(pairs, ensure_ascii=False)))
+            except sqlite3.IntegrityError as e:
+                raise ValueError(tr('This task already has an active dispatch')) from e
+            tickets.append((ticket, pairs))
+    prompt = dispatch_prompt(store, binding, root, cwd, tickets, plan)
     try:
         send(binding, prompt)
     except Exception as e:
         with store.conn:
-            store.conn.execute("UPDATE dispatches SET state='failed',summary=? WHERE ticket=? AND state='review'", (str(e), ticket))
+            for ticket, _ in tickets:
+                store.conn.execute("UPDATE dispatches SET state='failed',summary=? WHERE ticket=? AND state='review'", (str(e), ticket))
         raise
+    if len(tickets) > 1:
+        return tr('Sent {0} dispatches to the session agent for review').format(len(tickets))
     return tr('Sent to the session agent for review')
+
+
+def configured_model(binding):
+    """The Codex account's configured model, to suggest a valid id."""
+    try:
+        for line in (Path(binding.account)/'config.toml').read_text().splitlines():
+            key, _, value = line.partition('=')
+            if key.strip() == 'model':
+                return value.strip().strip('"')
+    except OSError:
+        pass
+    return None
+
+
+def dispatch_prompt(store, binding, root, cwd, tickets, plan):
+    """The request to the parent agent, with ready-to-run commands and Herdr references."""
+    many = len(tickets) > 1
+    lines = [f"Left Undone {'planning ' if plan else ''}dispatch request · worktree {cwd} · "
+             f"{len(tickets)} ticket{'s' if many else ''}", '']
+    for number, (ticket, pairs) in enumerate(tickets, 1):
+        lines.append(f'[{number}] ' + ('These tasks go TOGETHER to one worker (one brief covering all):'
+                                         if len(pairs) > 1 else 'Task:'))
+        lines.extend(('    - ' + text) for _, text in pairs)
+        lines.append('    Ticket command: ' + callback(root, 'dispatch', ticket))
+        if not plan and len(pairs) == 1:
+            previous = store.conn.execute(
+                "SELECT summary FROM dispatches WHERE parent=? AND item=? AND task=? AND state='planned' "
+                "ORDER BY updated DESC,rowid DESC LIMIT 1", (binding.key, pairs[0][0], pairs[0][1])).fetchone()
+            if previous:
+                lines.append('    The user approved execution of this proposed plan; include it in the brief:')
+                lines.extend('      ' + row for row in previous[0].splitlines())
+        lines.append('')
+    if binding.kind == 'claude':
+        models = 'haiku (simple, mechanical) · sonnet (normal coding) · opus (hard, risky or multi-step)'
+        efforts = 'low · medium · high · xhigh · max'
+        example = '--model opus --effort high' if plan else '--model haiku --effort low'
+    else:
+        model = configured_model(binding) or 'MODEL'
+        models = f'a model id valid for this Codex account (configured: {model})'
+        efforts = 'low · medium · high · xhigh'
+        example = f'--model {model} --effort ' + ('high' if plan else 'low')
+    policy = ('Planning: prefer the STRONGEST model and a high effort; a good plan saves the cheaper execution.'
+              if plan else
+              'Execution: prefer the WEAKEST model and lowest effort that can still do the task reliably;'
+              ' go up only for hard, risky or multi-step work.')
+    lines += [
+        'Steps',
+        '1. Review THIS conversation for what each worker needs (decisions, files, constraints, what was tried).',
+        '   If only the user can decide something, register the question and ask it here, then stop:',
+        "     <ticket command> --question <<'EOF'",
+        '     <the question>',
+        '     EOF',
+        '   After the answer, continue with the same ticket.',
+        '2. Choose model and effort per ticket. ' + policy,
+        f'     --model  {models}',
+        f'     --effort {efforts}',
+        f"3. Launch each worker (one call per ticket{', ' + str(len(tickets)) + ' calls' if many else ''}):",
+        f"     <ticket command> {example} <<'EOF'",
+        '     <standalone brief>',
+        '     EOF',
+        '   It prints JSON {"tab","pane","worktree","model","effort"}. Tell the user the tab and pane.',
+        '   Workers start in a new Herdr tab, in this worktree, account and CLI, with permissions bypassed,',
+        '   and report back to the Left Undone panel by themselves.',
+        '',
+        'The brief must stand alone (the worker sees nothing of this conversation):',
+        '  goal and why · exact files, paths and commands · scope and what NOT to touch',
+        '  (other panes, the user\'s sessions, commits/pushes unless asked) · acceptance checks and how',
+        '  to verify · report language (the user\'s language, plain words)' + (' · produce a plan only, no changes' if plan else ''),
+        '',
+        'Herdr reference to copy into the brief when the worker must drive panes or agents:',
+        '  herdr tab create --workspace W --cwd DIR --label NAME --no-focus   new tab (JSON: root_pane)',
+        "  herdr pane run PANE 'command'                                        run a command in a pane",
+        '  herdr pane read PANE --source visible                                read what the pane shows',
+        "  herdr pane send-text PANE 'text' · herdr pane send-keys PANE Enter   type / press keys",
+        '  herdr agent list · herdr agent get PANE                              agents, status, session IDs',
+        '  herdr pane list --workspace W · herdr plugin pane close PANE         list panes / close a plugin pane',
+        '  Rules: touch only panes you created; never run herdr server stop; Herdr has no atomic send,',
+        '  so never resend a prompt that may have been delivered.',
+        'Left Undone CLI (' + str(CLI) + '):',
+        '  list · open --pane P --session UUID [--project DIR] · items --binding FILE · changes --binding FILE',
+    ]
+    if plan:
+        lines.append('This is a PLANNING dispatch: each brief asks for a plan only; implementation waits for approval.')
+    return '\n'.join(lines)
 
 
 def selected_job(conn, token, worker=False):
@@ -180,9 +283,9 @@ def review(conn, root, args, body):
         raise ValueError(tr('The session agent must choose a model and effort'))
     with conn:
         conn.execute('BEGIN IMMEDIATE')
-        item = conn.execute("SELECT text FROM items WHERE session=? AND id=? AND status='open'",
-                            (binding.key, job['item'])).fetchone()
-        if not item or item[0] != job['task']:
+        current = [conn.execute("SELECT text FROM items WHERE session=? AND id=? AND status='open'",
+                                (binding.key, item)).fetchone() for item, _ in members(job)]
+        if any(not row or row[0] != text for row, (_, text) in zip(current, members(job))):
             conn.execute("UPDATE dispatches SET state='stopped' WHERE ticket=? AND state IN ('review','question')", (args.ticket,))
             conn.commit()
             raise ValueError(tr('The selected task changed'))
@@ -196,7 +299,7 @@ def review(conn, root, args, body):
         return tr('Waiting for you')
     try:
         result = herdr('tab','create','--workspace',binding.workspace,'--cwd',job['cwd'],
-                       '--label','Dispatch · '+str(job['item']),'--no-focus')
+                       '--label','Dispatch · '+'+'.join(str(item) for item, _ in members(job)),'--no-focus')
         pane = result['root_pane']
         if (pane['workspace_id'] != binding.workspace or Path(pane['cwd']).resolve() != Path(job['cwd'])
                 or pane['tab_id'] != result['tab']['tab_id']):
@@ -286,13 +389,17 @@ def report(conn, token, outcome, text):
         if (job['plan'] and outcome == 'done') or (outcome == 'planned' and not job['plan']):
             raise ValueError(tr('Invalid dispatch outcome'))
         if outcome in ('done', 'planned'):
-            current = conn.execute('SELECT text,status FROM items WHERE id=? AND session=?',(job['item'],job['parent'])).fetchone()
-            if not current or current[0] != job['task'] or (outcome == 'planned' and current[1] != 'open'):
+            pairs = members(job)
+            current = [conn.execute('SELECT text,status FROM items WHERE id=? AND session=?',(item,job['parent'])).fetchone()
+                       for item, _ in pairs]
+            if any(not row or row[0] != task or (outcome == 'planned' and row[1] != 'open')
+                   for row, (_, task) in zip(current, pairs)):
                 outcome = 'stopped'
                 text = tr('The selected task changed') + ' · ' + text
             elif outcome == 'done':
-                conn.execute("UPDATE items SET status='done',selected=0,dismissed=1 WHERE id=? AND session=?",
-                             (job['item'],job['parent']))
+                for item, _ in pairs:
+                    conn.execute("UPDATE items SET status='done',selected=0,dismissed=1 WHERE id=? AND session=?",
+                                 (item,job['parent']))
         conn.execute('UPDATE dispatches SET state=?,summary=? WHERE receipt=?',(outcome,text,token))
 
 

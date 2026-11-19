@@ -43,7 +43,7 @@ class ReadableUITests(unittest.TestCase):
             for key in ('\n','h','\x1b'):
                 path=journal(root,binding)
                 path.write_text(json.dumps(dict(stage='confirm',active='new',selection=[],approval='stale')))
-                window=Window(['a',key,'\x1b'])
+                window=Window(['a',key,'\x1b','2'])
                 worker=Mock()
                 worker.poll.return_value=None
                 with patch.object(ui.subprocess,'Popen',return_value=worker) as launch:
@@ -53,7 +53,8 @@ class ReadableUITests(unittest.TestCase):
                 self.assertIn('1 item',window.frames[1])
                 if key=='\x1b':
                     self.assertFalse(path.exists())
-                    self.assertEqual(launch.call_count,1)
+                    # Only the collector; the repo lookup for saved tasks runs git.
+                    self.assertEqual(sum(c.args[0][0]!='git' for c in launch.call_args_list),1)
                 else:
                     approval=json.loads(path.read_text())['approval']
                     self.assertNotEqual(approval,'stale')
@@ -66,7 +67,7 @@ class ReadableUITests(unittest.TestCase):
             b=ProjectStore(root/'state.db','other','/b');self.addCleanup(b.close)
             a.import_md('- [ ] Task A: detail A');b.import_md('- [ ] Task B: detail B')
             file=root/'binding.json';file.write_text(json.dumps(asdict(binding)))
-            window=Window(['a','7','7','8',curses.KEY_DOWN,'\n','1','\x1b']);sent=[]
+            window=Window(['a','7','7','8',curses.KEY_DOWN,'\n','1','\x1b','2']);sent=[]
             with patch('left_undone.ui.subprocess.Popen',return_value=Worker()),patch('left_undone.ui.send',side_effect=lambda binding,text:sent.append((binding.session,text))):
                 ui.panel(window,binding,root,file)
             self.assertTrue(any('HISTORY' in f for f in window.frames))
@@ -74,7 +75,7 @@ class ReadableUITests(unittest.TestCase):
             self.assertEqual(sent,[('test','You left this undone: Task A: detail A')])
             self.assertFalse(a.items()[0]['selected'])
             self.assertFalse(any('Task B' in frame for frame in window.frames))
-            self.assertIn('[8 Exchange project: b]', window.frames[-1])
+            self.assertIn('[8 Exchange project: b]', window.frames[-2])
             self.assertEqual(a.conn.execute('SELECT project FROM project_sessions WHERE session=?',(binding.key,)).fetchone()[0],'/a')
 
     def test_language_toggle_persists_and_preserves_legacy_task_and_shortcuts(self):
@@ -87,8 +88,8 @@ class ReadableUITests(unittest.TestCase):
             self.addCleanup(store.close)
             legacy = 'VOCÊ · Conferir fatura: validar o valor original.'
             store.import_md('- [ ] ' + legacy)
-            window = Window(['a','9','\x1b'])
-            reopened = Window(['9','\x1b'])
+            window = Window(['a','9','\x1b','2'])
+            reopened = Window(['9','\x1b','2'])
             with patch('left_undone.ui.subprocess.Popen', return_value=Worker()):
                 ui.panel(window, binding, root, file)
                 # Simulate a fresh process's English default before reopening.
@@ -97,9 +98,9 @@ class ReadableUITests(unittest.TestCase):
 
             for frame, section, switch in (
                 (window.frames[0], 'For you · 1', '[9 Português]'),
-                (window.frames[-1], 'PARA VOCÊ · 1', '[9 English]'),
+                (window.frames[-2], 'PARA VOCÊ · 1', '[9 English]'),
                 (reopened.frames[0], 'PARA VOCÊ · 1', '[9 English]'),
-                (reopened.frames[-1], 'For you · 1', '[9 Português]'),
+                (reopened.frames[-2], 'For you · 1', '[9 Português]'),
             ):
                 self.assertIn(switch, frame)
                 self.assertIn(section, frame)
@@ -107,7 +108,7 @@ class ReadableUITests(unittest.TestCase):
                 self.assertIn('Conferir fatura', human_tasks)
                 self.assertIn('validar o valor original.', human_tasks)
             self.assertIn('[1 Enviar 1]', reopened.frames[0])
-            self.assertIn('[1 Send 1]', reopened.frames[-1])
+            self.assertIn('[1 Send 1]', reopened.frames[-2])
             self.assertEqual(store.items()[0]['text'], legacy)
             self.assertTrue(store.items()[0]['selected'])
 

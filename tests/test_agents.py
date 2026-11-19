@@ -32,7 +32,7 @@ class AgentMonitorTests(unittest.TestCase):
         job=dict(main=False,tab='wP:t5',pane='wP:pG',label='Dispatch · 211',state='done',
                  task='Left Undone / Configuração: ' + '長'*49 + ' final')
         blocked=dict(job,tab='wP:t4',pane='wP:pF',label='Dispatch · 202')
-        rows=[(main,'Idle',None),(job,'Idle',1),(blocked,'Blocked',2)]
+        rows=[(main,'Idle',None),(job,'Idle',{'total':1}),(blocked,'Blocked',{'total':2})]
         for width in (12,19,38,63,64,88,120):
             with self.subTest(width=width):
                 lines=monitor_lines(rows,width)
@@ -62,16 +62,21 @@ class AgentMonitorTests(unittest.TestCase):
         self.assertIn('Done', ' '.join(s for line in lines for _,s,_ in line))
         self.assertIn('The file was read.', ' '.join(s for line in lines for _,s,_ in line))
 
-    def test_budget_meter_uses_cumulative_consumption(self):
-        from left_undone.agents import usage_meter
-        self.assertIn('▰▰▰▰▰▰▱▱▱▱ 60%', usage_meter(200000,500000))
-        self.assertIn('100%',usage_meter(0,500000))
-        self.assertIn('620,000',usage_meter(620000,500000))
-        self.assertIn('▱▱▱▱▱▱▱▱▱▱ 0%',usage_meter(620000,500000))
-        self.assertIn('50%',usage_meter(200000,400000))
-        self.assertNotIn('%',usage_meter(None,500000))
+    def test_meter_shows_context_used_with_abbreviations(self):
+        from left_undone.agents import usage_meter, abbreviate, claude_window
+        meter = usage_meter({'context':254160,'window':1_000_000,'total':23_114_025})
+        self.assertEqual(meter, '254k / 1M context used · ▰▰▰▱▱▱▱▱▱▱ 25% · 23.1M total')
+        self.assertIn('▰▰▰▰▰▰▰▰▰▰ 100%', usage_meter({'context':300000,'window':200000,'total':None}))
+        self.assertEqual(usage_meter({'context':None,'window':None,'total':950}), '950 total')
+        self.assertNotIn('%',usage_meter(None))
+        self.assertEqual([abbreviate(n) for n in (950,12_400,254_160,1_000_000,23_114_025)],
+                         ['950','12.4k','254k','1M','23.1M'])
+        self.assertEqual(claude_window(150_000,'claude-opus-5-5'),200_000)
+        self.assertEqual(claude_window(254_160,'claude-opus-5-5'),1_000_000)
+        self.assertEqual(claude_window(10,'claude-sonnet-5-5[1m]'),1_000_000)
+        self.assertEqual(claude_window(254_160,'x',400_000),400_000)
 
-    def test_claude_usage_counts_each_response_once_including_cache(self):
+    def test_claude_total_counts_each_message_once(self):
         from left_undone.agents import claude_total
         def row(mid, out, sid='session'):
             return json.dumps(dict(type='assistant',sessionId=sid,message=dict(id=mid,

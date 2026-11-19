@@ -3,7 +3,7 @@ status: ativo
 area: omarchy
 prioridade: media
 resumo: Herdr panel for tracking tasks and promises by conversation
-atualizado: 2026-11-18
+atualizado: 2026-11-19
 ---
 
 # TODO — Left Undone for Herdr
@@ -15,7 +15,6 @@ atualizado: 2026-11-18
 
 ## Next
 
-- [ ] Place the previous and next page buttons beside the current page number at the top of the panel.
 - [ ] On macOS, identify the Herdr fields that distinguish two disposable conversations and verify their values before and after `/resume`.
 - [ ] On macOS, test Open Here and Send in both disposable conversations, including after `/resume`, and record the actual recipients.
 - [ ] Adapt the panel, file locking and helper-process shutdown for native Windows.
@@ -27,6 +26,10 @@ atualizado: 2026-11-18
 - [ ] Require evidence of completion. The curator closed “check SATA errors” when the error count went up.
 - [ ] Track the visible Codex conversation and correct a stale UUID after `/new` or `/resume` before the first reply. Repeat the live switch and resume checks that exposed this failure.
 - [ ] Exclude Claude's automatic compaction summaries (`isCompactSummary`) from user requests during curation. Check `isMeta` and Codex system messages as well.
+- [ ] Run a real dispatch of 2 tasks (Separate and Together) in a disposable conversation and check tabs, reports and completion.
+- [ ] Run H live in a disposable Claude conversation and in a disposable Codex one; check /init detection, restore and task import.
+- [ ] Apply the plug-and-play prompt idea (short prompt, skill named only if installed) to the other buttons that prompt the agent.
+- [ ] Watch real use of the new picker and `open --current` from Codex (app-server tools may not descend from the TUI process; fallback is `CODEX_THREAD_ID`).
 
 ## Blocked
 
@@ -34,13 +37,13 @@ atualizado: 2026-11-18
 
 ## Done
 
+- [x] 2026-11-19 Dispatch request prompt now gives ready-to-run commands, valid model/effort values per CLI (weakest for execution, strongest for planning), a brief checklist and a Herdr/Left Undone command reference.
+- [x] 2026-11-19 Handoff (H) is universal for Codex and Claude: one short plug-and-play prompt that names an installed handoff skill only when found. Unit-tested; live run pending.
+- [x] 2026-11-19 Agents monitor shows context used (e.g. 273k / 1M · 27%) with abbreviated totals; [B] sets the Claude context window (automatic by default). Agents button moved to the top row.
+- [x] 2026-11-19 Dispatch accepts several tasks (separate tabs or together in one), page buttons and Close moved to the top, Close asks to export, and M opens the agents monitor below. Verified live except a real multi-tab dispatch.
+- [x] 2026-11-19 Picker shows only the current Herdr workspace in two-line blocks; from Herdr the panel opens in the picker pane and offers selective import of repo tasks; the skill uses `open --current`. Verified live.
+- [x] 2026-11-19 Opening a panel whose old copy sits in another tab now closes it and reopens beside the conversation. Verified live and with a regression test.
 - [x] 2026-11-18 Added a dedicated handoff confirmation screen and switched successor launch to a new Herdr tab. Verified the screen and disposable tab creation.
 - [x] 2026-11-16 Added project panels with highlighted titles, separate groups for the agent and the user, history, and unobtrusive dates.
 - [x] 2026-11-16 Made the short command open the global picker and focus an existing panel when reopened.
 - [x] 2026-11-16 Added creation dates and newest-first or oldest-first sorting while preserving selections.
-- [x] 2026-11-11 Updated tropico-2, omarchy2 and the new Omarchy installation to `70b61a3` with `git pull` and `install.py`. Tests passed on all three.
-- [x] 2026-11-11 Added commands and architecture notes to CLAUDE.md covering identity, collection, curation and storage.
-- [x] 2026-11-11 Made the curator split lists into individual tasks, omit redundant umbrella tasks and mark user-owned tasks with `VOCÊ`.
-- [x] 2026-11-10 Added Herdr pane titles alongside IDs in the conversation picker.
-- [x] 2026-11-10 Added confirmation for manual completion. Canceling preserves the selection and page.
-- [x] 2026-11-10 Added confirmation before queuing selected items for busy Codex sessions. Canceling preserves the selection and page. Claude queuing was unavailable in this version.

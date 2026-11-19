@@ -147,3 +147,23 @@ class ReopenTests(unittest.TestCase):
             with patch('left_undone.app.verify'),patch('left_undone.app.state_root',return_value=root),patch('left_undone.app.herdr',side_effect=api),patch('left_undone.app.panel_process_alive',return_value=False,create=True):
                 self.assertTrue(open_panel(b)['reused'])
             self.assertIn(('plugin','pane','focus','w1:p2'),calls)
+
+    def test_live_panel_in_other_tab_is_reopened_beside_conversation(self):
+        from left_undone.app import open_panel,atomic_json
+        from dataclasses import asdict
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);b=Binding('codex','s','account','w1:p1','term','w1','log',10,'1')
+            atomic_json(root/(b.key+'.binding.json'),asdict(b))
+            atomic_json(root/(b.key+'.pane.json'),{'pane':'w1:p2','terminal':'panel-term','created':0})
+            calls=[]
+            def api(*args):
+                calls.append(args)
+                if args[:3]==('plugin','pane','open'):return {'pane':{'pane_id':'w1:p3','terminal_id':'new-panel'}}
+                if args[:4]==('pane','current','--pane','w1:p1'):return {'pane':{'pane_id':'w1:p1','tab_id':'w1:t2'}}
+                if args[:2]==('pane','current'):return {'pane':{'pane_id':'w1:p2','terminal_id':'panel-term','tab_id':'w1:t1'}}
+                return {}
+            with patch('left_undone.app.verify'),patch('left_undone.app.state_root',return_value=root),patch('left_undone.app.herdr',side_effect=api),patch('left_undone.app.panel_process_alive',return_value=True,create=True):
+                result=open_panel(b)
+            self.assertIn(('plugin','pane','close','w1:p2'),calls)
+            self.assertNotIn(('plugin','pane','focus','w1:p2'),calls)
+            self.assertEqual(result['pane'],'w1:p3')

@@ -15,7 +15,8 @@ from .exchange import export_project, import_choices, import_selected
 from .runtime import send, send_selected, queue, queue_selected, QueueOffer
 from .projects import project_store
 from .ui_layout import (MouseInput, import_layout, panel_layout, picker_layout, terminal_text,
-                        confirmation_layout, queue_confirmation_layout, done_confirmation_layout, readable_panel_layout, project_label)
+                        confirmation_layout, queue_confirmation_layout, done_confirmation_layout, readable_panel_layout, project_label,
+                        conversation_layout, dispatch_choice_layout, close_choice_layout)
 from .collection_request import request_collection
 
 
@@ -37,6 +38,38 @@ def confirm_done(store,offer):
             raise RuntimeError(tr('Selection changed. Review the items and confirm again.'))
         store.done([item_id for item_id,_ in offer.items])
     return len(offer.items)
+
+
+class DispatchOffer:
+    """Several tasks selected: ask whether each gets its own tab or all share one."""
+    def __init__(self,count,plan):self.count=count;self.plan=plan
+
+
+class CloseOffer:
+    """Closing asks for confirmation and offers to export first."""
+
+
+def open_monitor(root,binding,binding_file):
+    """Open the agents monitor in a split below this panel, or focus it."""
+    from .runtime import herdr, PLUGIN
+    mapping=root/(binding.key+'.agents.json')
+    try:old=json.loads(mapping.read_text())
+    except (OSError,ValueError):old=None
+    if old:
+        try:live=herdr('pane','current','--pane',old['pane'])['pane']
+        except RuntimeError:live={}
+        if live.get('terminal_id')==old.get('terminal'):
+            herdr('plugin','pane','focus',old['pane'])
+            return tr('Agents monitor focused.')
+    below=os.environ.get('HERDR_PANE_ID') or binding.pane
+    result=herdr('plugin','pane','open','--plugin',PLUGIN,'--entrypoint','agents','--placement','split',
+                 '--target-pane',below,'--direction','down','--no-focus',
+                 '--env','LEFT_UNDONE_BINDING='+str(binding_file),'--env','LEFT_UNDONE_STATE_DIR='+str(root))
+    info=result.get('plugin_pane',result).get('pane') or {}
+    if info.get('pane_id'):
+        tmp=mapping.with_suffix('.tmp.'+str(os.getpid()))
+        tmp.write_text(json.dumps({'pane':info['pane_id'],'terminal':info.get('terminal_id')}));tmp.replace(mapping)
+    return tr('Agents monitor opened below.')
 
 
 def handle_key(key,store,visible,submit):
@@ -99,13 +132,13 @@ def input_action(key,mouse,layout):
     return None
 
 
-def pick_imports(win, choices, project):
+def pick_imports(win, choices, project, title=None, hint=None):
     selected = set()
     mouse = MouseInput()
     page = 0
     while True:
         height, width = win.getmaxyx()
-        layout = import_layout(choices, selected, width, height, page, project)
+        layout = import_layout(choices, selected, width, height, page, project, title, hint)
         page = layout.page
         mouse.sync(layout)
         render(win, layout)
@@ -214,6 +247,20 @@ def panel(win,binding,root,binding_file):
     old_pane = os.environ.pop('LEFT_UNDONE_CLOSE_SOURCE',None)
     if old_pane:
         notice = tr('Connected. You can close the old pane {0}.').format(old_pane)
+    offer = os.environ.pop('LEFT_UNDONE_OFFER_IMPORT', None)
+    if exchange_project and not old_pane:
+        try:
+            waiting = [c for c in import_choices(db, exchange_project) if not c['imported']]
+        except Exception:  # Best effort: the list must open even if the repo is unreadable.
+            waiting = []
+        if waiting and offer:
+            ids = pick_imports(win, import_choices(db, exchange_project), exchange_project,
+                               title=tr('Saved tasks in this repo'),
+                               hint=tr('Choose what to bring into this conversation. Esc skips.'))
+            notice = (tr('Nothing imported. Press 4 to import later.') if not ids else
+                      tr('Imported: {0}').format(import_selected(db, ids, exchange_project)))
+        elif waiting:
+            notice = tr('{0} saved tasks in this repo, none imported. Press 4 to import.').format(len(waiting))
     try:
         while True:
             h,w=win.getmaxyx();items=db.history_items() if history else db.items()
@@ -265,7 +312,7 @@ def panel(win,binding,root,binding_file):
             if confirmation:
                 question = (tr('Codex is in another conversation. Carry these tasks into a new tab?')
                             if confirmation['active'] != binding.session else
-                            tr('Prepare the handoff and open Codex in a new tab?'))
+                            tr('Prepare the handoff and open the agent in a new tab?'))
                 layout=confirmation_layout(w,h,len(confirmation['selection']),tr('CONFIRM HANDOFF'),
                                            question,tr('[H Confirm handoff]'))
             elif renewal_worker is not None:
@@ -273,6 +320,10 @@ def panel(win,binding,root,binding_file):
                 layout.add(0,0,tr('HANDOFF'),'title')
                 for y,line in enumerate(wrap_text(notice,max(1,w-1)),2):
                     layout.add(y,0,line)
+            elif isinstance(pending,DispatchOffer):
+                layout=dispatch_choice_layout(w,h,pending.count,pending.plan)
+            elif isinstance(pending,CloseOffer):
+                layout=close_choice_layout(w,h,len(db.items()) if exchange_project else 0)
             elif pending:
                 build=done_confirmation_layout if isinstance(pending,DoneOffer) else queue_confirmation_layout
                 layout=build(w,h,len(pending.items))
@@ -281,7 +332,7 @@ def panel(win,binding,root,binding_file):
                 layout=picker_layout(rows,w,h,page,project_cursor,notice=tr('Conversation: {0} · {1}').format(binding.kind, binding.pane),
                                      follow_cursor=True,title=tr('Choose exchange project'))
             elif getattr(db,'project',None):
-                layout=readable_panel_layout(items,w,h,page,exchange_project,status,notice,newest_first=newest_first,history=history,recipient=f'{binding.kind} · {binding.pane}',dispatch_reports=bool(jobs))
+                layout=readable_panel_layout(items,w,h,page,exchange_project,status,notice,newest_first=newest_first,history=history,recipient=f'{binding.kind} · {binding.session[:8]} · '+tr('account {0}').format(Path(binding.account).name)+f' · {binding.pane}',dispatch_reports=bool(jobs))
             else:layout=panel_layout(items,w,h,page,subtitle,status,notice,newest_first=newest_first,dispatch_reports=bool(jobs))
             if not pending:page=layout.page
             mouse.sync(layout);render(win,layout)
@@ -322,6 +373,24 @@ def panel(win,binding,root,binding_file):
                     exchange_project=projects[project_cursor]
                     projects=None;page=0;notice=''
                 continue
+            if isinstance(pending,DispatchOffer):
+                offer=pending
+                if action==('close',None):
+                    pending=None;notice=tr('Dispatch canceled.')+tr(' Selection kept.')
+                elif action in (('key','1'),('key','2')):
+                    pending=None
+                    try:notice=dispatch.request(db,binding,root,plan=offer.plan,together=action==('key','2'))
+                    except Exception as e:notice=str(e)
+                continue
+            if isinstance(pending,CloseOffer):
+                if action==('close',None):
+                    pending=None;notice=''
+                elif action==('key','1') and any(target.action==action for target in layout.targets):
+                    try:
+                        export_project(db, exchange_project);break
+                    except Exception as e:pending=None;notice=str(e)
+                elif action==('key','2'):break
+                continue
             if pending:
                 if action in (('close',None),('key','2')):
                     notice=(tr('Completion canceled.') if isinstance(pending,DoneOffer) else tr('Send canceled.'))+tr(' Selection kept.')
@@ -335,7 +404,9 @@ def panel(win,binding,root,binding_file):
                     except Exception as e:notice=str(e)
                     pending=None
                 continue
-            if action[0]=='close':break
+            if action[0]=='close':
+                if (exchange_project or db.items()) and renewal_worker is None:pending=CloseOffer();continue
+                break
             if action==('key','8') and getattr(db,'project',None):
                 projects=db.available_projects();project_cursor=projects.index(exchange_project);page=0
                 continue
@@ -366,18 +437,23 @@ def panel(win,binding,root,binding_file):
             if action==('key','R') and jobs:
                 dispatch_reports(win,db);notice=''
                 continue
+            if action==('key','M'):
+                try:notice=open_monitor(root,binding,binding_file)
+                except Exception as e:notice=str(e)
+                continue
             if history:continue
             try:
-                if action==('key','H') and binding.kind=='codex' and getattr(db,'project',None):
+                if action==('key','H') and getattr(db,'project',None):
                     renewal_errors = TemporaryFile(mode='w+',encoding='utf-8')
                     renewal_worker = subprocess.Popen([sys.executable,str(Path(__file__).resolve().parents[1]/'left-undone'),
                                                        'renew','--binding',str(binding_file),
                                                        *(['--confirm-source',approval] if approval else [])],
                                                       stderr=renewal_errors,stdout=subprocess.DEVNULL)
-                elif action==('key','P'):
-                    dispatch.request(db,binding,root,plan=True);notice=''
-                elif action==('key','0'):
-                    dispatch.request(db,binding,root);notice=''
+                elif action in (('key','P'),('key','0')):
+                    count=sum(bool(i['selected']) for i in db.items())
+                    if count>1:pending=DispatchOffer(count,action==('key','P'))
+                    else:notice=dispatch.request(db,binding,root,plan=action==('key','P'))
+
                 elif action==('key','3'):
                     path=export_project(db, exchange_project)
                     notice=tr('Exported: ')+str(path)
@@ -404,26 +480,36 @@ def panel(win,binding,root,binding_file):
         db.close()
 
 
-def picker(win,bindings,errors,choose,counts=None,titles=None):
+def conversation_title(title,suffix=None):
+    """Herdr titles often end in ' | <folder>'; the picker heading already names it."""
+    title=(title or '').strip()
+    if suffix and title.endswith(' | '+suffix):title=title[:-len(suffix)-3].strip()
+    return title or tr('Untitled in Herdr')
+
+
+def picker(win,bindings,errors,choose,counts=None,titles=None,heading=None,suffix=None):
+    """Choose one verified conversation. Returns whatever choose returns."""
     root=preference_root()
     load_language(root)
     configure(win);cursor=0;page=0;mouse=MouseInput();notice='; '.join(errors);size=None
     counts=counts or {}
     titles=titles or {}
     while True:
-        items=[{'id':i,'heading':f'{b.pane} · {titles.get(b.pane) or tr("Untitled in Herdr")}',
-            'text':tr('{0} · {1} · account {2}').format(b.kind, b.session[:12], Path(b.account).name)
-            +(tr(' · {0} open tasks').format(counts[b.key] if counts[b.key] is not None else "?") if b.key in counts else '')}
-           for i,b in enumerate(bindings)]
+        items=[]
+        for i,b in enumerate(bindings):
+            detail=tr('{0} · account {1}').format(b.kind.capitalize(), Path(b.account).name)
+            if b.key in counts:
+                detail+=tr(' · {0} open tasks').format(counts[b.key] if counts[b.key] is not None else '?')
+            items.append({'id':i,'title':conversation_title(titles.get(b.pane),suffix),'detail':detail,'pane':b.pane})
         h,w=win.getmaxyx()
-        layout=picker_layout(items,w,h,page,cursor,notice,follow_cursor=size!=(w,h))
+        layout=conversation_layout(items,w,h,None if size!=(w,h) else page,cursor,heading or tr('Herdr conversations'),notice)
         size=(w,h)
         page=layout.page;mouse.sync(layout);render(win,layout)
         try:key=win.get_wch()
         except curses.error:continue
         if key in (curses.KEY_UP,curses.KEY_DOWN):
             cursor=max(0,min(len(items)-1,cursor+(1 if key==curses.KEY_DOWN else -1)))
-            page=picker_layout(items,w,h,page,cursor,notice,follow_cursor=True).page
+            page=conversation_layout(items,w,h,None,cursor,'',notice).page
             continue
         action=('open',None) if key in ('\n','\r') else input_action(key,mouse,layout)
         if not action:continue
@@ -435,12 +521,12 @@ def picker(win,bindings,errors,choose,counts=None,titles=None):
             except OSError as error:
                 notice=str(error)
             continue
-        if kind=='close':return
+        if kind=='close':return None
         if kind=='choose':cursor=value
         if kind in ('next','prev'):
             page=max(0,min(layout.pages-1,page+(1 if kind=='next' else -1)))
-            visible=picker_layout(items,w,h,page,cursor).visible
+            visible=conversation_layout(items,w,h,page,cursor,'',notice).visible
             if visible:cursor=visible[0]['id']
         if kind=='open' and bindings and any(i['id']==cursor for i in layout.visible):
-            try:choose(bindings[cursor]);return
+            try:return choose(bindings[cursor])
             except (RuntimeError,OSError,ValueError) as e:notice=str(e)

@@ -155,16 +155,16 @@ def build_layout(items,width,height,page,subtitle,status,notice,picker=False,cur
         labels.append((language_button(), ('key','9')))
         if items:labels.append((tr('[Open]'),('open',None)))
     else:
-        if selected == 1:labels.extend([('[0 Dispatch Sub-Agent]',('key','0')), (tr('[P Dispatch Plan]'),('key','P'))])
+        if selected:labels.extend([(tr('[0 Dispatch {0}]').format(selected),('key','0')),(tr('[P Dispatch plan {0}]').format(selected),('key','P'))])
         if selected:labels.extend([(tr('[1 Send {0}]').format(selected),('key','1')),(tr('[2 Mark complete {0}]').format(selected),('key','2'))])
         if dispatch_reports:labels.append((tr('[R Dispatch reports]'), ('key','R')))
         labels.append((language_button(), ('key','9')))
         labels.extend([(tr('[3 Export]'),('key','3')),(tr('[4 Import]'),('key','4')),
-                       (tr('[5 Collect now]'),('key','5')),(tr('[V Review]'),('key','V'))])
+                       (tr('[5 Collect now]'),('key','5')),(tr('[V Review]'),('key','V')),(tr('[M Agents]'),('key','M'))])
     packed,button_rows=buttons(labels,usable)
-    nav,nav_rows=buttons([('[<]',('prev',None)),('[>]',('next',None)),(tr('[Close]'),('close',None))],usable)
+    nav,nav_rows=buttons([('[<]',('prev',None)),('[>]',('next',None)),(tr('[Close]'),('close',None))],usable) if picker else ([],0)
     if not picker and height - button_rows - nav_rows < 6:
-        labels = [(f'[{action[1]}]' if action[1] in ('1','2','3','4','5','R','V') else label, action)
+        labels = [(f'[{action[1]}]' if action[1] in ('1','2','3','4','5','R','V','M') else label, action)
                   for label,action in labels]
         packed,button_rows=buttons(labels,usable)
     # Compact status/notice before sacrificing the list or its action buttons.
@@ -179,8 +179,14 @@ def build_layout(items,width,height,page,subtitle,status,notice,picker=False,cur
         return layout
     pages=pages_for(items,usable,room,picker)
     page=max(0,min(page,len(pages)-1));layout.page=page;layout.pages=len(pages)
-    layout.add(0,0,title,'title');layout.add(1,0,subtitle)
-    layout.add(2,0,tr('{0} items · {1}/{2}').format(len(items), page+1, len(pages)))
+    if picker:
+        layout.add(0,0,title,'title')
+        layout.add(2,0,tr('{0} items · {1}/{2}').format(len(items), page+1, len(pages)))
+    else:
+        close_x=top_close(layout,usable)
+        layout.add(0,0,fit(title,max(1,close_x-1)),'title')
+        counter_with_pages(layout,2,tr('{0} items').format(len(items)),page,len(pages))
+    layout.add(1,0,subtitle)
     y=4
     for index,(item,lines) in enumerate(pages[page]):
         layout.visible.append(item)
@@ -248,14 +254,15 @@ def picker_layout(items,width,height,page,cursor,notice='',follow_cursor=False,t
     return layout
 
 
-def import_layout(choices, selected, width, height, page, project):
+def import_layout(choices, selected, width, height, page, project, title=None, hint=None):
     layout = Layout(width, height)
     usable = max(1, width - 1)
     labels = [(tr('[1 Import {0}]').format(len(selected)), ('key', '1') if selected else None)]
     labels.extend([('[<]', ('prev', None)), ('[>]', ('next', None)),
                    (tr('[Esc Cancel]'), ('close', None))])
     controls, control_rows = buttons(labels, usable)
-    room = height - control_rows - 4
+    hints = wrap_text(hint, usable)[:2] if hint else []
+    room = height - control_rows - 4 - len(hints)
     if room < 1 or width < 18:
         layout.add(0, 0, tr('Enlarge the panel'))
         layout.add(height - 1, 0, tr('[Esc Cancel]'), action=('close', None))
@@ -265,11 +272,13 @@ def import_layout(choices, selected, width, height, page, project):
     pages = pages_for(rows, usable, room, exchange=True)
     layout.pages = len(pages)
     layout.page = max(0, min(page, len(pages) - 1))
-    layout.add(0, 0, tr('Import from project'), 'title')
+    layout.add(0, 0, title or tr('Import from project'), 'title')
     layout.add(1, 0, str(project))
-    layout.add(2, 0, tr('{0} selected · page {1}/{2}').format(
+    for n, line in enumerate(hints):
+        layout.add(2 + n, 0, line)
+    layout.add(2 + len(hints), 0, tr('{0} selected · page {1}/{2}').format(
         len(selected), layout.page + 1, layout.pages))
-    y = 4
+    y = 4 + len(hints)
     for index, (choice, lines) in enumerate(pages[layout.page]):
         layout.visible.append(choice)
         chosen = choice['id'] in selected
@@ -280,7 +289,7 @@ def import_layout(choices, selected, width, height, page, project):
             layout.add(y, 0, (prefix if n == 0 else '      ') + line, style, action, usable)
             y += 1
     if not choices:
-        layout.add(4, 0, tr('No exported tasks in this project.'))
+        layout.add(4 + len(hints), 0, tr('No exported tasks in this project.'))
     for row, x, label, action in controls:
         layout.add(height - control_rows + row, x, label, 'button' if action else 'dim', action)
     return layout
@@ -352,35 +361,84 @@ def project_label(project):
     return {'git-todo-atlas':'Atlas'}.get(name,name)
 
 
+def top_close(layout,usable):
+    """Discreet Close at the top right of the title row."""
+    label=tr('[Close]')
+    x=max(0,usable-cell_width(label))
+    layout.add(0,x,label,'dim',('close',None))
+    return x
+
+
+def counter_with_pages(layout,y,text,page,pages):
+    """'N tasks · [<] page 1/2 [>]' on one row, page buttons beside the number."""
+    layout.add(y,0,text+' · ','dim')
+    x=cell_width(text+' · ')
+    layout.add(y,x,'[<]','button',('prev',None));x+=4
+    label=tr('page {0}/{1}').format(page+1,pages)
+    layout.add(y,x,label,'dim');x+=cell_width(label)+1
+    layout.add(y,x,'[>]','button',('next',None))
+
+
+def choice_layout(width,height,title,question,options):
+    """A question with numbered options; Esc always goes back."""
+    layout=Layout(width,height);usable=max(1,width-1)
+    if width<18 or height<10:
+        layout.add(0,0,tr('Enlarge the panel'))
+        layout.add(height-1,0,tr('[Esc Back]'),action=('close',None))
+        return layout
+    layout.add(0,0,title,'title')
+    packed,rows=buttons(options+[(tr('[Esc Back]'),('close',None))],usable)
+    for y,line in enumerate(bounded_lines(question,usable,height-rows-4),2):
+        layout.add(y,0,line)
+    for row,x,label,action in packed:
+        layout.add(height-rows-1+row,x,label,'button',action)
+    return layout
+
+
+def dispatch_choice_layout(width,height,count,plan):
+    title=tr('DISPATCH PLAN · {0} TASKS').format(count) if plan else tr('DISPATCH · {0} TASKS').format(count)
+    return choice_layout(width,height,title,tr('Send each task to its own new tab, or all of them together to one tab?'),
+                         [(tr('[1 Separate · {0} tabs]').format(count),('key','1')),(tr('[2 Together · 1 tab]'),('key','2'))])
+
+
+def close_choice_layout(width,height,open_count):
+    question=tr('Close Left Undone? Export the {0} open tasks to the project first?').format(open_count) if open_count else tr('Close Left Undone?')
+    options=[(tr('[1 Export and close]'),('key','1'))] if open_count else []
+    options.append((tr('[2 Close without exporting]') if open_count else tr('[2 Close]'),('key','2')))
+    return choice_layout(width,height,tr('CLOSE PANEL'),question,options)
+
+
 def readable_panel_layout(items,width,height,page,project,status,notice,newest_first=True,history=False,recipient='',dispatch_reports=False):
     if width<18 or height<16:
         return build_layout([],width,min(height,11),0,'','','')
     layout=Layout(width,height);usable=width-1
     selected=0 if history else sum(bool(i.get('selected')) for i in items)
     labels=[]
-    if selected == 1:labels.extend([('[0 Dispatch Sub-Agent]',('key','0')), (tr('[P Dispatch Plan]'),('key','P'))])
+    if selected:labels.extend([(tr('[0 Dispatch {0}]').format(selected),('key','0')),(tr('[P Dispatch plan {0}]').format(selected),('key','P'))])
     if selected:labels.extend([(tr('[1 Send {0}]').format(selected),('key','1')),(tr('[2 Mark complete {0}]').format(selected),('key','2'))])
     labels.extend([(tr('[3 Export]'),('key','3')),(tr('[4 Import]'),('key','4')),(tr('[5 Collect]'),('key','5')),(tr('[V Review]'),('key','V'))])
-    if recipient.startswith('codex · '):labels.append((tr('[H Handoff + new]'),('key','H')))
+    labels.append((tr('[H Handoff + new]'),('key','H')))
     if history:labels=[]
     if dispatch_reports:labels.append((tr('[R Dispatch reports]'), ('key','R')))
     controls,control_rows=buttons(labels,usable)
-    navigation,nav_rows=buttons([('[<]',('prev',None)),('[>]',('next',None)),(tr('[Close]'),('close',None))],usable)
     top,top_rows=buttons([(tr('[6 Newest ↓]') if newest_first else tr('[6 Oldest ↑]'),('key','6')),
-                         (tr('[7 Open tasks]') if history else tr('[7 History]'),('key','7')),(language_button(),('key','9'))],usable)
+                         (tr('[7 Open tasks]') if history else tr('[7 History]'),('key','7')),(language_button(),('key','9')),
+                         (tr('[M Agents]'),('key','M'))],usable)
     start=3+top_rows
     unknown=sum(creation_date(i) is None for i in items)
-    footer=control_rows+nav_rows+2+(1 if unknown else 0)
+    footer=control_rows+2+(1 if unknown else 0)
     room=height-footer-start
     if room<3:
         layout.add(0,0,tr('Enlarge the panel'));layout.add(height-1,0,tr('[Close]'),action=('close',None));return layout
     ordered=sort_items(items,newest_first)
     pages=card_pages(ordered,usable,room,history)
     page=max(0,min(page,len(pages)-1));layout.page=page;layout.pages=len(pages)
-    layout.add(0,0,('LEFT UNDONE' if not history else tr('LEFT UNDONE · HISTORY'))+(' · '+recipient if recipient else ''),'title')
+    close_x=top_close(layout,usable)
+    heading=('LEFT UNDONE' if not history else tr('LEFT UNDONE · HISTORY'))+(' · '+recipient if recipient else '')
+    layout.add(0,0,fit(heading,max(1,close_x-1)),'title')
     layout.add(1,0,tr('[8 Exchange project: ')+project_label(project)+']','button',('key','8'))
     for y,x,label,action in top:layout.add(2+y,x,label,'button',action)
-    layout.add(2+top_rows,0,f'{len(items)} '+(tr('closed') if history else tr('open task') if len(items)==1 else tr('open tasks'))+tr(' · page {0}/{1}').format(page+1, len(pages)),'dim')
+    counter_with_pages(layout,2+top_rows,f'{len(items)} '+(tr('closed') if history else tr('open task') if len(items)==1 else tr('open tasks')),page,len(pages))
     indices={};seen=set();y=start
     for item,line,style in pages[page]:
         if item is None:layout.add(y,0,line,style);y+=1;continue
@@ -396,7 +454,62 @@ def readable_panel_layout(items,width,height,page,project,status,notice,newest_f
     status=status.replace(tr('Curation up to date'),tr('Collector active'))
     layout.add(y,0,notice or status,'dim');y+=1
     for row,x,label,action in controls:layout.add(y+row,x,label,'button',action)
+    layout.add(height-1,0,tr('Mouse / keys'),'dim')
+    return layout
+
+
+
+def conversation_layout(entries,width,height,page,cursor,heading,notice=''):
+    """Conversation picker for one Herdr workspace: two lines per conversation."""
+    layout=Layout(width,height);usable=max(1,width-1)
+    if width<18 or height<12:
+        layout.add(0,0,tr('Enlarge the panel to view the list.'))
+        layout.add(height-1,0,tr('[Close]'),action=('close',None))
+        return layout
+    labels=[(tr('[Open]'),('open',None))] if entries else []
+    labels.append((language_button(),('key','9')))
+    controls,control_rows=buttons(labels,usable)
+    navigation,nav_rows=buttons([('[<]',('prev',None)),('[>]',('next',None)),(tr('[Close]'),('close',None))],usable)
+    notes=wrap_text(notice,usable)[:3] if notice else []
+    start=4;footer=len(notes)+(1 if notes else 0)+control_rows+nav_rows
+    room=height-start-footer
+    if room<3:
+        layout.add(0,0,tr('Enlarge the panel'));layout.add(height-1,0,tr('[Close]'),action=('close',None))
+        return layout
+    rule='─'*min(usable,60)
+    pages=[[]];used=0
+    for entry in entries:
+        block=[('entry',entry),('detail',entry),('rule',entry)]
+        if used and used+len(block)>room:pages.append([]);used=0
+        pages[-1].extend(block[:room]);used+=min(len(block),room)
+    if page is None:
+        page=next((n for n,rows in enumerate(pages) if any(e['id']==cursor for _,e in rows)),0)
+    page=max(0,min(page,len(pages)-1));layout.page=page;layout.pages=len(pages)
+    layout.add(0,0,tr('CHOOSE CONVERSATION'),'title')
+    layout.add(1,0,heading,'title')
+    count=len(entries)
+    layout.add(2,0,(tr('1 conversation') if count==1 else tr('{0} conversations').format(count))
+               +tr(' · page {0}/{1}').format(page+1,len(pages)),'dim')
+    y=start
+    for kind,entry in pages[page]:
+        chosen=entry['id']==cursor
+        if kind=='entry':
+            layout.visible.append(entry)
+            layout.add(y,0,('▸ ' if chosen else '  ')+entry['title'],'selected' if chosen else 'title',('choose',entry['id']),usable)
+        elif kind=='detail':
+            line='    '+entry['detail']
+            layout.add(y,0,line,'selected' if chosen else 'normal',('choose',entry['id']),usable)
+            x=usable-cell_width(entry['pane'])
+            if entry.get('pane') and x>cell_width(line)+1:layout.add(y,x,entry['pane'],'dim')
+        else:
+            layout.add(y,0,rule,'dim')
+        y+=1
+    if not entries:layout.add(start,0,tr('No conversations in this workspace.'))
+    y=height-footer
+    if notes:
+        y+=1
+        for line in notes:layout.add(y,0,line,'dim');y+=1
+    for row,x,label,action in controls:layout.add(y+row,x,label,'button',action)
     y+=control_rows
     for row,x,label,action in navigation:layout.add(y+row,x,label,'button',action)
-    layout.add(height-1,0,tr('Mouse / keys'),'dim')
     return layout

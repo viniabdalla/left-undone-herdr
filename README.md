@@ -7,27 +7,32 @@ Left Undone tracks open tasks and promises from a Codex or Claude conversation i
 Run `left-undone` from any directory inside Herdr, choose **Left Undone: Open tasks** in Herdr, or ask Codex or Claude to use the `left-undone-herdr` skill.
 
 ```sh
-left-undone                         # Open the global conversation picker
+left-undone                         # Pick a conversation of the current Herdr workspace
+left-undone open --current          # Open the conversation running this command (skill)
 left-undone open --repo .           # Filter by project
 ./left-undone list                  # List sessions and identity checks
-./left-undone open                  # Open the picker across all repositories
 ./left-undone open --pane PANE --session UUID
 ```
 
-The short command always opens the global picker, even for a single verifiable conversation. Each entry shows the title, agent, pane, UUID, account and open item count. In an interactive terminal, press Enter or click **Open** to choose a conversation, or press Esc to return to the shell. Agent tools without an interactive terminal open the picker in a regular Herdr split. Choosing a conversation opens its panel on the right and leaves focus where it was. If the panel already exists, Herdr focuses it, even in another tab.
+The short command opens the picker for the current Herdr workspace. Conversations of other workspaces never appear; an empty workspace says so. Each conversation is a two-line block: the title in bold, then agent, account and open item count, with the pane ID on the right. Press Enter or click **Open** to choose, or Esc to leave.
+
+From Herdr (**Left Undone: Open tasks**), the picker opens in a split and the chosen conversation's panel replaces it in that same pane. If the repo has saved tasks in `.left-undone/tasks.md`, the panel first lists them so you can select what to import; Esc skips. From an interactive terminal, the panel opens on the right of the conversation instead, with the same import offer. If a panel for that conversation is already open in its tab, it is focused; a panel left in another tab is closed and reopened.
+
+The skill calls `left-undone open --current`, which opens the panel of the conversation that runs it beside that conversation, with nothing imported. The panel tells you how many saved tasks the repo has; press 4 to import them.
 
 Use `--repo` to filter by the conversation’s recorded starting directory. The filter resolves symlinks and uses the Git root when run from a subdirectory. Each worktree is a separate project. Outside Git, the directory must match exactly. A single verifiable match opens directly. If only saved conversations match, resume one in the agent first. Each new conversation starts with its own empty list and can import selected project tasks. Promises belong to their original conversation, and sending always requires a verified recipient.
 
 ## Use the panel
 
-Click any line of a task or press its letter to toggle selection. The Send and Complete buttons show how many items are selected. You can also click Export, Import, the page controls and Close. Scroll the mouse wheel to change pages. Text wraps to the panel width and long tasks continue on the next page.
+Click any line of a task or press its letter to toggle selection. The Send and Complete buttons show how many items are selected. You can also click Export, Import, the page controls beside the task counter, and Close at the top right. Scroll the mouse wheel to change pages. Text wraps to the panel width and long tasks continue on the next page.
 
 | Key | Action |
 |---|---|
 | a–z | Toggle an item on the current page |
-| 0 | Dispatch Sub-Agent for one selected task |
-| P | Dispatch one selected task in native Plan Mode (Codex or Claude) |
-| H | Prepare a handoff and start a new Codex session in a new tab |
+| 0 | Dispatch the selected tasks to sub-agents; with several, choose one tab per task or all together in one tab |
+| P | Same as 0, in native Plan Mode (Codex or Claude) |
+| M | Open the agents monitor in a split below the panel, or focus it |
+| H | Hand off this conversation and continue in a new session of the same agent (Codex or Claude) in a new tab |
 | R | Read dispatch reports for this conversation |
 | 1 | Send selected items to the linked conversation and keep them open |
 | 2 | Review and confirm completion of selected items |
@@ -40,17 +45,17 @@ Click any line of a task or press its letter to toggle selection. The Send and C
 | 8 | Choose the project for Export and Import |
 | 9 | Switch between English and Portuguese and remember the choice |
 | ← / → | Change page |
-| Esc | Close the panel and stop collection |
+| Esc | Ask to close the panel (export first, close without exporting, or go back) |
 
 The panel starts in English. Press **9** or click the language button to switch languages. Left Undone saves the preference locally for the next time you open it.
 
-**Dispatch Sub-Agent.** Select one task and press `0`. The linked agent checks the context, asks for clarification if needed and chooses the worker model and reasoning effort. Its dispatch command opens a new tab in the same Herdr workspace and worktree and returns the tab and pane IDs. The worker starts with a standalone brief and the same CLI and account. New Codex workers start with approvals and sandboxing disabled. New Claude workers start in the `bypassPermissions` mode. Its prompt includes a callback to report changes, verification, and outstanding work. A blocked report keeps the task open. A completion report closes the original task if its text still matches. Press `R` in the original panel to read the reports, including after reopening. Answer worker questions in the tab identified in the report.
+**Dispatch Sub-Agent.** Select tasks and press `0`. With several selected, choose **Separate** (one new tab per task) or **Together** (one tab whose worker handles all of them; its completion report closes every task that still matches). All tickets reach the linked agent in a single message. The linked agent checks the context, asks for clarification if needed and chooses the worker model and reasoning effort. Its dispatch command opens a new tab in the same Herdr workspace and worktree and returns the tab and pane IDs. The worker starts with a standalone brief and the same CLI and account. New Codex workers start with approvals and sandboxing disabled. New Claude workers start in the `bypassPermissions` mode. Its prompt includes a callback to report changes, verification, and outstanding work. A blocked report keeps the task open. A completion report closes the original task if its text still matches. Press `R` in the original panel to read the reports, including after reopening. Answer worker questions in the tab identified in the report.
 
-**Dispatch Plan.** Select one task and press `P`. The parent prepares a planning brief, and the worker uses its provider’s plan mode. Read the proposal with `R`. The task stays open. Press `0` on that task when you approve execution. The parent receives the proposed plan with the execution request.
+**Dispatch Plan.** Select tasks and press `P`; several selected tasks offer the same Separate or Together choice. The parent prepares a planning brief, and the worker uses its provider’s plan mode. Read the proposal with `R`. The task stays open. Press `0` on that task when you approve execution. The parent receives the proposed plan with the execution request.
 
 **Review a dispatch.** In Agents, click **Review** beneath a task while the linked Main is idle, or select its button with Tab and press Enter. The Main checks the original request and evidence. **Done** or **Not done** and a short reason appear under that task and remain available when you reopen Agents. The review leaves the task list and worker report intact.
 
-**Handoff and new session.** Press `H` with the source Codex idle. The panel verifies the active thread through `/status`. If the displayed list belongs to an older thread in that terminal, the panel asks whether to carry its tasks into the handoff. Click **Confirm handoff** or press Enter on the confirmation screen to approve the displayed list. The panel exports the tasks and asks the source to update TODO.md, evaluate commit and push under local rules, and save the handoff. After confirmation it opens a Codex successor in a new Herdr tab, in the same worktree and account. It runs /init, waits for the successor to confirm restoration, verifies the imported tasks, and binds the existing Left Undone panel to the successor. Close the old Codex pane when Left Undone displays the ready message. A paused transition retains its stage and successor pane for the next H. The monitor uses the verified successor as Main. The feature requires the English Session field in the Codex TUI’s /status output.
+**Handoff and new session.** Works for Codex and Claude. Press `H` with the agent idle and confirm. The panel exports the open tasks to the project and sends the session one short request: do a handoff following this project's local settings, ending with a receipt line. If an installed skill of that agent has "handoff" in its name, the request names it; otherwise it is a plain prompt. After the receipt, the panel opens the same agent in a new Herdr tab with the same worktree and account, waits for Herdr to identify the new session, runs `/init`, asks it to restore the handoff the same plug-and-play way, imports the exported tasks and binds the existing panel to the successor. Close the old pane when Left Undone shows the ready message. A paused transition keeps its stage for the next H. Codex identifies the active thread through `/status` (English TUI); Claude uses the session Herdr reports.
 
 **Sending to busy Codex sessions.** Press `1` to queue the request or `2` or Esc to cancel and keep the current selection and page. Queuing requires a Codex CLI with `codex queue`. The request goes to the verified conversation’s native queue under the same account, and the current turn continues. A receipt acknowledges delivery to the queue. The tasks stay open until completed. Confirmation serializes item writes with the collector. If the selection changes or an item is completed, review the items and try again. After a failure the selection is preserved. Check the native queue before retrying an uncertain delivery. Claude has no queue in this version, so wait for the agent to finish.
 
